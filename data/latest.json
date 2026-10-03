@@ -1,60 +1,19 @@
 {
-  "checked_at": "2026-10-03T15:50:56.875Z",
-  "target_date": "2026-10-02",
+  "checked_at": "2026-10-03T16:00:26.305Z",
+  "target_date": "2026-10-03",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
-  "status": "partial",
-  "error": "1 avvisi durante il controllo; la copertura non è completa.",
-  "warnings": [
-    {
-      "code": "announcement_detail_unverified",
-      "message": "Link del candidato non trovato nella pagina risultati: https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639925.",
-      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639925",
-      "publication_date": "2026-10-02",
-      "detail_verified": false,
-      "retained_from": "result_listing",
-      "diagnostics": {
-        "html": "diagnostics/4639925/detail.html",
-        "screenshot": "diagnostics/4639925/detail.png",
-        "network": "diagnostics/4639925/network-summary.json"
-      },
-      "diagnostics_error": null
-    }
-  ],
+  "status": "success",
+  "error": null,
+  "warnings": [],
   "errors": [],
   "coverage": {
-    "complete": false,
-    "pages_checked": 2,
-    "listings_seen": 96,
-    "candidates_found": 1,
+    "complete": true,
+    "pages_checked": 1,
+    "listings_seen": 48,
+    "candidates_found": 0,
     "candidates_checked": 0,
     "stop_reason": "page_only_older_dates"
   },
-  "announcement_errors": [
-    {
-      "code": "announcement_detail_unverified",
-      "message": "Link del candidato non trovato nella pagina risultati: https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639925.",
-      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639925",
-      "publication_date": "2026-10-02",
-      "detail_verified": false,
-      "retained_from": "result_listing",
-      "diagnostics": {
-        "html": "diagnostics/4639925/detail.html",
-        "screenshot": "diagnostics/4639925/detail.png",
-        "network": "diagnostics/4639925/network-summary.json"
-      },
-      "diagnostics_error": null
-    }
-  ],
-  "announcements": [
-    {
-      "title": "VAI ALL'ANNUNCIO",
-      "location": null,
-      "court_or_procedure": null,
-      "publication_date": "2026-10-02",
-      "sale_or_deadline_date": null,
-      "price_or_value": null,
-      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639925",
-      "detail_verified": false
-    }
-  ]
+  "announcement_errors": [],
+  "announcements": []
 }
