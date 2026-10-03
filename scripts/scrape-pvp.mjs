@@ -107,6 +107,93 @@ function readLabel(text, labels) {
   return null;
 }
 
+const CREDIT_DESCRIPTION_LABELS = [
+  "descrizione\\s+(?:del\\s+)?credito",
+  "descrizione\\s+(?:del\\s+)?lotto",
+  "descrizione\\s+(?:del\\s+)?bene",
+  "descrizione",
+];
+
+const FIELD_BOUNDARY_LABELS = [
+  "categoria",
+  "tipologia",
+  "tribunale",
+  "ufficio\\s+giudiziario",
+  "n[°ºo]\\s*procedura",
+  "numero\\s+procedura",
+  "anno\\s+procedura",
+  "procedura",
+  "registro\\s+generale",
+  "r\\.?g\\.?",
+  "data\\s+(?:di\\s+)?pubblicazione",
+  "pubblicato\\s+(?:sul\\s+portale\\s+)?il",
+  "data\\s+(?:della\\s+)?vendita",
+  "termine\\s+presentazione\\s+offerte",
+  "scadenza\\s+offerte",
+  "data\\s+asta",
+  "prezzo\\s+base(?:\\s+d['’]asta)?",
+  "offerta\\s+minima",
+  "modalit[aà]\\s+(?:di\\s+)?vendita",
+  "luogo\\s+(?:di\\s+)?vendita",
+  "ubicazione",
+  "indirizzo",
+  "citt[aà]",
+  "comune",
+  "localit[aà]",
+  "provincia",
+  "custode",
+  "delegato",
+  "professionista",
+  "giudice",
+  "numero\\s+lotto",
+  "codice\\s+lotto",
+  "dati\\s+(?:del|della)\\s+(?:bene|lotto|procedura|vendita)",
+  "documenti",
+  "allegati",
+];
+
+function matchLabel(line, label) {
+  return line.match(new RegExp(`^${label}\\s*(?::|-)?\\s*(.*)$`, "i"));
+}
+
+function readLabelBlock(text, labels, stopLabels) {
+  const lines = linesOf(text);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    for (const label of labels) {
+      const match = matchLabel(lines[index], label);
+      if (!match) continue;
+
+      const values = [];
+      const sameLine = clean(match[1]);
+      if (sameLine) values.push(sameLine);
+
+      for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+        const line = lines[cursor];
+        if (stopLabels.some((stopLabel) => matchLabel(line, stopLabel))) break;
+        values.push(line);
+      }
+
+      const value = clean(values.join(" "));
+      if (value) return value;
+    }
+  }
+
+  return null;
+}
+
+function creditDescriptionFrom(text) {
+  return readLabelBlock(text, CREDIT_DESCRIPTION_LABELS, FIELD_BOUNDARY_LABELS);
+}
+
+function baseAuctionPriceFrom(text) {
+  return readLabel(text, [
+    "prezzo\\s+base\\s+d['’]asta",
+    "prezzo\\s+base",
+    "base\\s+d['’]asta",
+  ]);
+}
+
 function publicationDateFrom(text) {
   const labeled = readLabel(text, [
     "data\\s+di\\s+pubblicazione",
@@ -238,11 +325,6 @@ function extractJsonDetails(payloads) {
       "pubblicatoIl",
     ]),
   );
-  const location = unique([
-    firstJsonValue(entries, ["citta", "comune", "localita", "luogo"]),
-    firstJsonValue(entries, ["indirizzo"]),
-    firstJsonValue(entries, ["provincia"]),
-  ]).join(", ");
   const courtOrProcedure = unique([
     firstJsonValue(entries, ["tribunale", "ufficioGiudiziario"]),
     firstJsonValue(entries, ["numeroProcedura", "procedura", "registroGenerale", "rg"]),
@@ -250,7 +332,13 @@ function extractJsonDetails(payloads) {
 
   return {
     title: firstJsonValue(entries, ["descrizioneLotto", "descrizione", "titolo", "tipologia"]),
-    location: location || null,
+    credit_description: firstJsonValue(entries, [
+      "descrizioneCredito",
+      "descrizioneLotto",
+      "descrizioneBene",
+      "lotDescription",
+      "descrizione",
+    ]),
     court_or_procedure: courtOrProcedure || null,
     publication_date: publicationDate,
     sale_or_deadline_date: toIsoDate(
@@ -262,12 +350,11 @@ function extractJsonDetails(payloads) {
         "dataAsta",
       ]),
     ),
-    price_or_value: firstJsonValue(entries, [
+    base_auction_price: firstJsonValue(entries, [
+      "prezzoBaseAsta",
+      "prezzoBaseDasta",
       "prezzoBase",
-      "prezzo",
-      "valore",
-      "offertaMinima",
-      "importo",
+      "baseAuctionPrice",
     ]),
   };
 }
@@ -652,12 +739,6 @@ function procedureReferenceFrom(text) {
 
 function extractListingAnnouncement(item) {
   const listingText = item.listingText;
-  const location = unique([
-    readLabel(listingText, ["citt[aà]", "comune", "localit[aà]", "luogo"]),
-    readLabel(listingText, ["indirizzo"]),
-    readLabel(listingText, ["provincia"]),
-  ]).join(", ");
-
   const courtOrProcedure = unique([
     readLabel(listingText, ["tribunale", "ufficio giudiziario"]),
     procedureReferenceFrom(listingText),
@@ -674,15 +755,6 @@ function extractListingAnnouncement(item) {
       ]),
     ) || null;
 
-  const priceOrValue =
-    readLabel(listingText, [
-      "prezzo base",
-      "prezzo",
-      "valore",
-      "offerta minima",
-      "importo",
-    ]) || null;
-
   const title =
     item.listingTitle ||
     readLabel(listingText, ["descrizione lotto", "descrizione", "tipologia"]) ||
@@ -690,11 +762,11 @@ function extractListingAnnouncement(item) {
 
   return {
     title: title ? clean(title) : null,
-    location: location || null,
+    credit_description: creditDescriptionFrom(listingText),
     court_or_procedure: courtOrProcedure || null,
     publication_date: item.listingPublicationDate,
     sale_or_deadline_date: saleOrDeadlineDate,
-    price_or_value: priceOrValue,
+    base_auction_price: baseAuctionPriceFrom(listingText),
     official_url: item.url,
     detail_verified: false,
   };
@@ -858,11 +930,6 @@ async function extractAnnouncement(context, listPage, item) {
     }
     if (publicationDate !== targetDate) return null;
 
-    const location = unique([
-      readLabel(bodyText, ["citt[aà]", "comune", "localit[aà]", "luogo"]),
-      readLabel(bodyText, ["indirizzo"]),
-      readLabel(bodyText, ["provincia"]),
-    ]).join(", ");
     const courtOrProcedure = unique([
       readLabel(bodyText, ["tribunale", "ufficio giudiziario"]),
       procedureReferenceFrom(bodyText),
@@ -876,13 +943,8 @@ async function extractAnnouncement(context, listPage, item) {
         "data asta",
       ]),
     );
-    const priceOrValue = readLabel(bodyText, [
-      "prezzo base",
-      "prezzo",
-      "valore",
-      "offerta minima",
-      "importo",
-    ]);
+    const creditDescription = creditDescriptionFrom(bodyText);
+    const baseAuctionPrice = baseAuctionPriceFrom(bodyText);
     const title =
       readLabel(bodyText, ["descrizione lotto", "descrizione", "tipologia"]) ||
       jsonDetails.title ||
@@ -893,11 +955,11 @@ async function extractAnnouncement(context, listPage, item) {
 
     return {
       title: clean(title),
-      location: location || jsonDetails.location || null,
+      credit_description: creditDescription || jsonDetails.credit_description || null,
       court_or_procedure: courtOrProcedure || jsonDetails.court_or_procedure || null,
       publication_date: publicationDate,
       sale_or_deadline_date: saleOrDeadlineDate || jsonDetails.sale_or_deadline_date || null,
-      price_or_value: priceOrValue || jsonDetails.price_or_value || null,
+      base_auction_price: baseAuctionPrice || jsonDetails.base_auction_price || null,
       official_url: item.url,
       detail_verified: true,
     };
