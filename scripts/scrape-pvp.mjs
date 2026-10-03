@@ -705,7 +705,7 @@ try {
     console.warn(
       `Controllo parziale per ${targetDate}: ${deduplicated.length} annunci conservati, ${verifiedCount} con dettaglio verificato e ${unverifiedDetailCount} con dettaglio non verificato. La copertura è incompleta; un elenco vuoto non equivale a zero annunci.`,
     );
-    process.exitCode = 1;
+    if (errors.length > 0) process.exitCode = 1;
   } else {
     console.log(
       `Controllo completato per ${targetDate}: ${deduplicated.length} annunci verificati.`,
