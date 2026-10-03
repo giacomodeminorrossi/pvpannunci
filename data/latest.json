@@ -1,8 +1,8 @@
 {
-  "checked_at": null,
-  "target_date": null,
+  "checked_at": "2026-10-03T12:03:44.945Z",
+  "target_date": "2026-10-03",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
-  "status": "not_run_yet",
-  "error": null,
+  "status": "error",
+  "error": "Pagina vuota o illeggibile per l'annuncio https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639925.",
   "announcements": []
 }
