@@ -128,6 +128,7 @@ const FIELD_BOUNDARY_LABELS = [
   "data\\s+(?:di\\s+)?pubblicazione",
   "pubblicato\\s+(?:sul\\s+portale\\s+)?il",
   "data\\s+(?:della\\s+)?vendita",
+  "vendita$",
   "termine\\s+presentazione\\s+offerte",
   "scadenza\\s+offerte",
   "data\\s+asta",
@@ -182,8 +183,21 @@ function readLabelBlock(text, labels, stopLabels) {
   return null;
 }
 
+function normalizeCreditDescription(value) {
+  return clean(value)
+    .replace(/\\s+([,.;:!?])/g, "$1")
+    .replace(/([([{])\\s+/g, "$1")
+    .replace(/([.!?;:])(?=[^\\s])/g, "$1 ")
+    .replace(/([a-zà-öø-ÿ])(?=[A-ZÀ-ÖØ-Þ])/g, "$1 ")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])(?=\\d)/g, "$1 ")
+    .replace(/(\\d)(?=[A-Za-zÀ-ÖØ-öø-ÿ])/g, "$1 ")
+    .replace(/\\s+/g, " ")
+    .trim();
+}
+
 function creditDescriptionFrom(text) {
-  return readLabelBlock(text, CREDIT_DESCRIPTION_LABELS, FIELD_BOUNDARY_LABELS);
+  const value = readLabelBlock(text, CREDIT_DESCRIPTION_LABELS, FIELD_BOUNDARY_LABELS);
+  return value ? normalizeCreditDescription(value) : null;
 }
 
 function baseAuctionPriceFrom(text) {
@@ -332,13 +346,15 @@ function extractJsonDetails(payloads) {
 
   return {
     title: firstJsonValue(entries, ["descrizioneLotto", "descrizione", "titolo", "tipologia"]),
-    credit_description: firstJsonValue(entries, [
-      "descrizioneCredito",
-      "descrizioneLotto",
-      "descrizioneBene",
-      "lotDescription",
-      "descrizione",
-    ]),
+    credit_description: normalizeCreditDescription(
+      firstJsonValue(entries, [
+        "descrizioneCredito",
+        "descrizioneLotto",
+        "descrizioneBene",
+        "lotDescription",
+        "descrizione",
+      ]),
+    ) || null,
     court_or_procedure: courtOrProcedure || null,
     publication_date: publicationDate,
     sale_or_deadline_date: toIsoDate(
