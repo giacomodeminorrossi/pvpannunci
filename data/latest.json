@@ -1,6 +1,6 @@
 {
-  "checked_at": "2026-10-03T16:30:39.707Z",
-  "target_date": "2026-10-02",
+  "checked_at": "2026-10-03T16:36:17.746Z",
+  "target_date": "2026-09-28",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
   "status": "success",
   "error": null,
@@ -10,20 +10,60 @@
     "complete": true,
     "pages_checked": 2,
     "listings_seen": 96,
-    "candidates_found": 1,
-    "candidates_checked": 1,
+    "candidates_found": 5,
+    "candidates_checked": 5,
     "stop_reason": "page_only_older_dates"
   },
   "announcement_errors": [],
   "announcements": [
     {
-      "title": "Tramite Commissionario",
-      "location": "Cisterna di Latina, Sassari",
-      "court_or_procedure": "Tribunale di SASSARI - 922/2026",
-      "publication_date": "2026-10-02",
-      "sale_or_deadline_date": "2026-10-23",
-      "price_or_value": "6.494,40 €",
-      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639925",
+      "title": "Competitiva",
+      "location": "vendita",
+      "court_or_procedure": "Tribunale di MILANO - 236/2018",
+      "publication_date": "2026-09-28",
+      "sale_or_deadline_date": "2026-10-26",
+      "price_or_value": "60.000,00 €",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4637201",
+      "detail_verified": true
+    },
+    {
+      "title": "Competitiva",
+      "location": null,
+      "court_or_procedure": "- - 26/2018",
+      "publication_date": "2026-09-28",
+      "sale_or_deadline_date": "2026-10-14",
+      "price_or_value": "100.000,00 €",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4637391",
+      "detail_verified": true
+    },
+    {
+      "title": "Senza Incanto",
+      "location": "vendita",
+      "court_or_procedure": "Tribunale di PORDENONE - 22/2020",
+      "publication_date": "2026-09-28",
+      "sale_or_deadline_date": "2026-11-05",
+      "price_or_value": "10.000,00 €",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4637012",
+      "detail_verified": true
+    },
+    {
+      "title": "Senza Incanto",
+      "location": null,
+      "court_or_procedure": "Tribunale di PISTOIA - 33/2026",
+      "publication_date": "2026-09-28",
+      "sale_or_deadline_date": "2026-10-29",
+      "price_or_value": "14.000,00 €",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4636951",
+      "detail_verified": true
+    },
+    {
+      "title": "Competitiva",
+      "location": "vendita",
+      "court_or_procedure": "Tribunale di VERONA - 43/2025",
+      "publication_date": "2026-09-28",
+      "sale_or_deadline_date": "2026-10-28",
+      "price_or_value": "6.370,28 €",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4636942",
       "detail_verified": true
     }
   ]
