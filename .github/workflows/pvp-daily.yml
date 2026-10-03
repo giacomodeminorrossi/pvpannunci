@@ -1,0 +1,68 @@
+name: Controllo giornaliero PVP
+
+on:
+  schedule:
+    - cron: "45 16 * * *"
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "Data da controllare (YYYY-MM-DD); vuoto = oggi in Europe/Paris"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pvp-daily
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Europe/Paris
+
+    steps:
+      - name: Scarica il repository
+        uses: actions/checkout@v4
+
+      - name: Configura Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Installa le dipendenze
+        run: npm install --no-audit --no-fund
+
+      - name: Installa Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Controlla gli annunci PVP
+        id: scrape
+        continue-on-error: true
+        env:
+          TARGET_DATE: ${{ github.event.inputs.target_date || '' }}
+        run: npm run scrape
+
+      - name: Salva il risultato
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/latest.json
+
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica a data/latest.json."
+          else
+            git commit -m "Update daily PVP results"
+            git push
+          fi
+
+      - name: Segnala un controllo non completato
+        if: steps.scrape.outcome == 'failure'
+        run: |
+          echo "Lo scraper non ha completato il controllo. Consultare data/latest.json."
+          exit 1
