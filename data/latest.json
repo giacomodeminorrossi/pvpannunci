@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-03T16:28:46.475Z",
+  "checked_at": "2026-10-03T16:30:39.707Z",
   "target_date": "2026-10-02",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
   "status": "success",
@@ -8,12 +8,23 @@
   "errors": [],
   "coverage": {
     "complete": true,
-    "pages_checked": 1,
-    "listings_seen": 48,
-    "candidates_found": 0,
-    "candidates_checked": 0,
+    "pages_checked": 2,
+    "listings_seen": 96,
+    "candidates_found": 1,
+    "candidates_checked": 1,
     "stop_reason": "page_only_older_dates"
   },
   "announcement_errors": [],
-  "announcements": []
+  "announcements": [
+    {
+      "title": "Tramite Commissionario",
+      "location": "Cisterna di Latina, Sassari",
+      "court_or_procedure": "Tribunale di SASSARI - 922/2026",
+      "publication_date": "2026-10-02",
+      "sale_or_deadline_date": "2026-10-23",
+      "price_or_value": "6.494,40 €",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639925",
+      "detail_verified": true
+    }
+  ]
 }
