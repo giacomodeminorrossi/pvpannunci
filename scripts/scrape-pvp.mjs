@@ -15,6 +15,7 @@ const DETAIL_CONTENT_TIMEOUT_MS = 15_000;
 const DETAIL_STABILITY_MS = 1_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = resolve(__dirname, "../data/latest.json");
+const DIAGNOSTICS_PATH = resolve(__dirname, "../diagnostics");
 const startedAt = Date.now();
 const deadlineAt = startedAt + GLOBAL_BUDGET_MS;
 
@@ -149,6 +150,176 @@ function isAnnouncementUrl(url) {
   }
 }
 
+function announcementIdFrom(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.searchParams.get("idAnnuncio") || parsed.searchParams.get("idInserzione");
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeOfficialUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.hostname !== "pvp.giustizia.it") return null;
+    for (const key of [...url.searchParams.keys()]) {
+      if (/auth|authorization|cookie|csrf|jwt|key|password|secret|session|token/i.test(key)) {
+        url.searchParams.delete(key);
+      }
+    }
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizedKey(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase();
+}
+
+function scalarEntries(value, path = [], result = [], depth = 0) {
+  if (depth > 8 || result.length >= 2_000 || value === null || value === undefined) {
+    return result;
+  }
+  if (Array.isArray(value)) {
+    for (const [index, child] of value.entries()) {
+      scalarEntries(child, [...path, String(index)], result, depth + 1);
+    }
+  } else if (typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      scalarEntries(child, [...path, key], result, depth + 1);
+    }
+  } else if (["string", "number", "boolean"].includes(typeof value)) {
+    result.push({ path, key: normalizedKey(path.at(-1)), value: clean(value) });
+  }
+  return result;
+}
+
+function firstJsonValue(entries, keys) {
+  const wanted = new Set(keys.map(normalizedKey));
+  return entries.find((entry) => wanted.has(entry.key) && entry.value)?.value || null;
+}
+
+function jsonLooksPertinent(value, item, responseUrl) {
+  const entries = scalarEntries(value);
+  const identifier = announcementIdFrom(item.url);
+  const hasIdentifier = identifier && entries.some((entry) => entry.value === identifier);
+  const responseIdentifier = announcementIdFrom(responseUrl);
+  const relevantKeys = new Set([
+    "idannuncio",
+    "idannunciopvp",
+    "datapubblicazione",
+    "descrizionelotto",
+    "numeroprocedura",
+  ]);
+  const hasRelevantKeys = entries.some((entry) => relevantKeys.has(entry.key));
+  const endpointMatches = identifier && responseIdentifier === identifier;
+  return {
+    pertinent: Boolean(hasIdentifier || (endpointMatches && hasRelevantKeys)),
+    entries,
+  };
+}
+
+function extractJsonDetails(payloads) {
+  const entries = payloads.flatMap((payload) => scalarEntries(payload));
+  const publicationDate = toIsoDate(
+    firstJsonValue(entries, ["dataPubblicazione", "publicationDate", "pubblicatoIl"]),
+  );
+  const location = unique([
+    firstJsonValue(entries, ["citta", "comune", "localita", "luogo"]),
+    firstJsonValue(entries, ["indirizzo"]),
+    firstJsonValue(entries, ["provincia"]),
+  ]).join(", ");
+  const courtOrProcedure = unique([
+    firstJsonValue(entries, ["tribunale", "ufficioGiudiziario"]),
+    firstJsonValue(entries, ["numeroProcedura", "procedura", "registroGenerale", "rg"]),
+  ]).join(" - ");
+
+  return {
+    title: firstJsonValue(entries, ["descrizioneLotto", "descrizione", "titolo", "tipologia"]),
+    location: location || null,
+    court_or_procedure: courtOrProcedure || null,
+    publication_date: publicationDate,
+    sale_or_deadline_date: toIsoDate(
+      firstJsonValue(entries, [
+        "dataVendita",
+        "dataDellaVendita",
+        "terminePresentazioneOfferte",
+        "scadenzaOfferte",
+        "dataAsta",
+      ]),
+    ),
+    price_or_value: firstJsonValue(entries, [
+      "prezzoBase",
+      "prezzo",
+      "valore",
+      "offertaMinima",
+      "importo",
+    ]),
+  };
+}
+
+function startNetworkCapture(context, item) {
+  const responses = [];
+  const payloads = [];
+  const pending = new Set();
+  let active = true;
+
+  const listener = (response) => {
+    if (!active) return;
+    const request = response.request();
+    if (!["fetch", "xhr"].includes(request.resourceType())) return;
+    const safeUrl = sanitizeOfficialUrl(response.url());
+    if (!safeUrl) return;
+
+    const task = (async () => {
+      const summary = {
+        url: safeUrl,
+        status: response.status(),
+        resource_type: request.resourceType(),
+        json_detected: false,
+        pertinent: false,
+        top_level_keys: [],
+      };
+      try {
+        const json = await response.json();
+        summary.json_detected = true;
+        summary.top_level_keys =
+          json && typeof json === "object" && !Array.isArray(json)
+            ? Object.keys(json)
+                .filter((key) => !/auth|cookie|csrf|jwt|password|secret|session|token/i.test(key))
+                .slice(0, 50)
+            : [];
+        const match = jsonLooksPertinent(json, item, safeUrl);
+        summary.pertinent = match.pertinent;
+        if (match.pertinent) payloads.push(json);
+      } catch {
+        // La risposta non contiene JSON leggibile; il riepilogo resta metadato-only.
+      }
+      responses.push(summary);
+    })();
+    pending.add(task);
+    task.finally(() => pending.delete(task));
+  };
+
+  context.on("response", listener);
+  return {
+    responses,
+    payloads,
+    async stop() {
+      active = false;
+      context.off("response", listener);
+      await Promise.allSettled([...pending]);
+    },
+  };
+}
+
 function remainingBudgetMs() {
   return deadlineAt - Date.now();
 }
@@ -194,16 +365,21 @@ async function assertUsablePage(page, response, context) {
 }
 
 async function waitForReadableDetail(page, response, context) {
-  if (!response) {
-    throw new Error(`Nessuna risposta HTTP ricevuta per ${context}.`);
-  }
-
-  if (!response.ok()) {
+  if (response && !response.ok()) {
     throw new Error(`Risposta HTTP ${response.status()} per ${context}.`);
   }
 
   const contentTimeout = operationTimeout(DETAIL_CONTENT_TIMEOUT_MS, context);
   const deadline = Date.now() + contentTimeout;
+  await page.locator("body").waitFor({
+    state: "visible",
+    timeout: Math.min(5_000, contentTimeout),
+  });
+  await page
+    .locator("main, article, [class*='detail'], [id*='detail']")
+    .first()
+    .waitFor({ state: "visible", timeout: Math.min(5_000, contentTimeout) })
+    .catch(() => {});
   await page
     .waitForLoadState("load", { timeout: Math.min(5_000, contentTimeout) })
     .catch(() => {});
@@ -254,7 +430,12 @@ async function waitForReadableDetail(page, response, context) {
     throw new Error(`Contenuto o data di pubblicazione non leggibile per ${context}.`);
   }
 
-  return assertUsablePage(page, response, context);
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  if (!clean(bodyText)) throw new Error(`Pagina vuota o illeggibile per ${context}.`);
+  if (looksBlocked(bodyText)) {
+    throw new Error(`Il sito PVP ha bloccato o interrotto l'accesso per ${context}.`);
+  }
+  return bodyText;
 }
 
 async function collectAnnouncementCards(page) {
@@ -319,6 +500,7 @@ async function collectAnnouncementCards(page) {
         listingText,
         listingTitle: clean(item.linkText),
         listingPublicationDate: publicationDateFrom(item.listingText),
+        listingPageUrl: page.url(),
       });
     }
   }
@@ -504,42 +686,173 @@ function extractListingAnnouncement(item) {
   };
 }
 
-async function extractAnnouncement(page, item) {
-  ensureBudget(`la verifica dell'annuncio ${item.url}`);
-  const response = await page.goto(item.url, {
-    waitUntil: "domcontentloaded",
-    timeout: operationTimeout(NAVIGATION_TIMEOUT_MS, `il caricamento dell'annuncio ${item.url}`),
+async function findCandidateLink(page, item) {
+  await page.locator("a[href]").first().waitFor({
+    state: "attached",
+    timeout: operationTimeout(10_000, `la ricerca del link ${item.url}`),
   });
-  const bodyText = await waitForReadableDetail(page, response, `l'annuncio ${item.url}`);
-  const detailPublicationDate = publicationDateFrom(bodyText);
-  const publicationDate = detailPublicationDate || item.listingPublicationDate;
+  const links = page.locator("a[href]");
+  const count = await links.count();
+  for (let index = 0; index < count; index += 1) {
+    const link = links.nth(index);
+    const href = await link.getAttribute("href");
+    if (!href) continue;
+    try {
+      const normalized = new URL(href, page.url());
+      normalized.hash = "";
+      if (normalized.toString() === item.url) return link;
+    } catch {
+      // Ignora href non interpretabili.
+    }
+  }
+  throw new Error(`Link del candidato non trovato nella pagina risultati: ${item.url}.`);
+}
 
-  if (!publicationDate) {
-    throw new Error(`Data di pubblicazione non verificabile per l'annuncio ${item.url}.`);
+async function waitForClickedDetail(context, listPage, beforePages, beforeUrl, beforeText, item) {
+  const timeout = operationTimeout(DETAIL_CONTENT_TIMEOUT_MS, `l'apertura tramite click di ${item.url}`);
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const popup = context.pages().find((candidate) => !beforePages.has(candidate));
+    if (popup) return { detailPage: popup, openedNewPage: true, response: null };
+    if (listPage.url() !== beforeUrl || isAnnouncementUrl(listPage.url())) {
+      return { detailPage: listPage, openedNewPage: false, response: null };
+    }
+    const currentText = await listPage.locator("body").innerText().catch(() => "");
+    if (clean(currentText) && clean(currentText) !== clean(beforeText)) {
+      return { detailPage: listPage, openedNewPage: false, response: null };
+    }
+    await listPage.waitForTimeout(250);
+  }
+  throw new Error(`Il click non ha aperto un dettaglio leggibile per ${item.url}.`);
+}
+
+async function sanitizedHtml(page) {
+  return page.evaluate(() => {
+    const clone = document.documentElement.cloneNode(true);
+    clone.querySelectorAll("script, noscript").forEach((element) => element.remove());
+    clone.querySelectorAll("input[type='hidden']").forEach((element) => {
+      element.removeAttribute("value");
+    });
+    clone.querySelectorAll("*").forEach((element) => {
+      for (const attribute of [...element.attributes]) {
+        if (/auth|cookie|csrf|jwt|password|secret|session|token/i.test(attribute.name)) {
+          element.removeAttribute(attribute.name);
+        }
+      }
+    });
+    return `<!doctype html>\n${clone.outerHTML}`;
+  });
+}
+
+async function saveDiagnostics(page, item, networkResponses, error) {
+  const id = announcementIdFrom(item.url) || `candidate-${Date.now()}`;
+  const directory = resolve(DIAGNOSTICS_PATH, id.replace(/[^a-zA-Z0-9_-]/g, "_"));
+  await mkdir(directory, { recursive: true });
+  const paths = {
+    html: `diagnostics/${id}/detail.html`,
+    screenshot: `diagnostics/${id}/detail.png`,
+    network: `diagnostics/${id}/network-summary.json`,
+  };
+  await writeFile(resolve(directory, "detail.html"), await sanitizedHtml(page), "utf8");
+  await page.screenshot({ path: resolve(directory, "detail.png"), fullPage: true });
+  await writeFile(
+    resolve(directory, "network-summary.json"),
+    `${JSON.stringify(
+      {
+        captured_at: new Date().toISOString(),
+        announcement_id: id,
+        official_url: sanitizeOfficialUrl(item.url),
+        error: error instanceof Error ? error.message : String(error),
+        responses: networkResponses,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return paths;
+}
+
+async function restoreResultsPage(page, item) {
+  if (page.isClosed()) return;
+  if (page.url() !== item.listingPageUrl) {
+    await page.goBack({
+      waitUntil: "domcontentloaded",
+      timeout: operationTimeout(15_000, `il ritorno alla lista dopo ${item.url}`),
+    }).catch(() => null);
+  }
+  const linkIsPresent = await findCandidateLink(page, item).then(() => true).catch(() => false);
+  if (!linkIsPresent) {
+    await page.goto(item.listingPageUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: operationTimeout(30_000, `il ripristino della lista dopo ${item.url}`),
+    });
+  }
+}
+
+async function extractAnnouncement(context, listPage, item) {
+  ensureBudget(`la verifica dell'annuncio ${item.url}`);
+  if (listPage.url() !== item.listingPageUrl) {
+    const response = await listPage.goto(item.listingPageUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: operationTimeout(NAVIGATION_TIMEOUT_MS, `il ritorno alla lista per ${item.url}`),
+    });
+    await assertUsablePage(listPage, response, `la pagina risultati per ${item.url}`);
   }
 
-  if (publicationDate !== targetDate) {
-    return null;
-  }
+  const capture = startNetworkCapture(context, item);
+  let detailPage = listPage;
+  let openedNewPage = false;
+  try {
+    const link = await findCandidateLink(listPage, item);
+    const beforePages = new Set(context.pages());
+    const beforeUrl = listPage.url();
+    const beforeText = await listPage.locator("body").innerText().catch(() => "");
+    await link.scrollIntoViewIfNeeded();
+    await link.click({
+      timeout: operationTimeout(15_000, `il click sul candidato ${item.url}`),
+    });
+    ({ detailPage, openedNewPage } = await waitForClickedDetail(
+      context,
+      listPage,
+      beforePages,
+      beforeUrl,
+      beforeText,
+      item,
+    ));
+    detailPage.setDefaultTimeout(20_000);
+    await detailPage.waitForLoadState("domcontentloaded", {
+      timeout: operationTimeout(10_000, `il caricamento dinamico di ${item.url}`),
+    }).catch(() => {});
 
-  const location = unique([
-    readLabel(bodyText, ["citt[aà]", "comune", "localit[aà]", "luogo"]),
-    readLabel(bodyText, ["indirizzo"]),
-    readLabel(bodyText, ["provincia"]),
-  ]).join(", ");
+    let bodyText = "";
+    let bodyError = null;
+    try {
+      bodyText = await waitForReadableDetail(detailPage, null, `l'annuncio ${item.url}`);
+    } catch (error) {
+      bodyError = error;
+      bodyText = await detailPage.locator("body").innerText().catch(() => "");
+    }
+    await capture.stop();
+    const jsonDetails = extractJsonDetails(capture.payloads);
+    const detailPublicationDate = publicationDateFrom(bodyText) || jsonDetails.publication_date;
+    const publicationDate = detailPublicationDate || item.listingPublicationDate;
 
-  const courtOrProcedure = unique([
-    readLabel(bodyText, ["tribunale", "ufficio giudiziario"]),
-    readLabel(bodyText, [
-      "numero procedura",
-      "procedura",
-      "r\\.?g\\.?",
-      "registro generale",
-    ]),
-  ]).join(" - ");
+    if (!detailPublicationDate) {
+      throw bodyError || new Error(`Data di pubblicazione non verificabile per l'annuncio ${item.url}.`);
+    }
+    if (publicationDate !== targetDate) return null;
 
-  const saleOrDeadlineDate =
-    toIsoDate(
+    const location = unique([
+      readLabel(bodyText, ["citt[aà]", "comune", "localit[aà]", "luogo"]),
+      readLabel(bodyText, ["indirizzo"]),
+      readLabel(bodyText, ["provincia"]),
+    ]).join(", ");
+    const courtOrProcedure = unique([
+      readLabel(bodyText, ["tribunale", "ufficio giudiziario"]),
+      readLabel(bodyText, ["numero procedura", "procedura", "r\\.?g\\.?", "registro generale"]),
+    ]).join(" - ");
+    const saleOrDeadlineDate = toIsoDate(
       readLabel(bodyText, [
         "data vendita",
         "data della vendita",
@@ -547,34 +860,46 @@ async function extractAnnouncement(page, item) {
         "scadenza offerte",
         "data asta",
       ]),
-    ) || null;
-
-  const priceOrValue =
-    readLabel(bodyText, [
+    );
+    const priceOrValue = readLabel(bodyText, [
       "prezzo base",
       "prezzo",
       "valore",
       "offerta minima",
       "importo",
-    ]) || null;
+    ]);
+    const title =
+      (await firstUsefulHeading(detailPage)) ||
+      readLabel(bodyText, ["descrizione lotto", "descrizione", "tipologia"]) ||
+      jsonDetails.title ||
+      item.listingTitle ||
+      item.listingText ||
+      "Annuncio PVP";
 
-  const title =
-    (await firstUsefulHeading(page)) ||
-    readLabel(bodyText, ["descrizione lotto", "descrizione", "tipologia"]) ||
-    item.listingTitle ||
-    item.listingText ||
-    "Annuncio PVP";
-
-  return {
-    title: clean(title),
-    location: location || null,
-    court_or_procedure: courtOrProcedure || null,
-    publication_date: publicationDate,
-    sale_or_deadline_date: saleOrDeadlineDate,
-    price_or_value: priceOrValue,
-    official_url: item.url,
-    detail_verified: true,
-  };
+    return {
+      title: clean(title),
+      location: location || jsonDetails.location || null,
+      court_or_procedure: courtOrProcedure || jsonDetails.court_or_procedure || null,
+      publication_date: publicationDate,
+      sale_or_deadline_date: saleOrDeadlineDate || jsonDetails.sale_or_deadline_date || null,
+      price_or_value: priceOrValue || jsonDetails.price_or_value || null,
+      official_url: item.url,
+      detail_verified: true,
+    };
+  } catch (error) {
+    await capture.stop();
+    try {
+      error.diagnostics = await saveDiagnostics(detailPage, item, capture.responses, error);
+    } catch (diagnosticError) {
+      error.diagnostics_error = diagnosticError instanceof Error
+        ? diagnosticError.message
+        : String(diagnosticError);
+    }
+    throw error;
+  } finally {
+    if (openedNewPage && !detailPage.isClosed()) await detailPage.close().catch(() => {});
+    await restoreResultsPage(listPage, item).catch(() => {});
+  }
 }
 
 function deduplicateAnnouncements(values) {
@@ -632,7 +957,7 @@ try {
     const item = candidates[index];
     try {
       ensureBudget(`la verifica dei dettagli (${index + 1}/${candidates.length})`);
-      const announcement = await extractAnnouncement(page, item);
+      const announcement = await extractAnnouncement(context, page, item);
       coverage.candidates_checked += 1;
       if (announcement) announcements.push(announcement);
     } catch (error) {
@@ -645,6 +970,8 @@ try {
         publication_date: item.listingPublicationDate,
         detail_verified: false,
         retained_from: retainedFromListing ? "result_listing" : null,
+        diagnostics: error?.diagnostics || null,
+        diagnostics_error: error?.diagnostics_error || null,
       });
       announcementErrors.push(warning);
       warnings.push(warning);
