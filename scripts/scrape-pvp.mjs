@@ -687,23 +687,24 @@ function extractListingAnnouncement(item) {
 }
 
 async function findCandidateLink(page, item) {
-  await page.locator("a[href]").first().waitFor({
-    state: "attached",
-    timeout: operationTimeout(10_000, `la ricerca del link ${item.url}`),
-  });
-  const links = page.locator("a[href]");
-  const count = await links.count();
-  for (let index = 0; index < count; index += 1) {
-    const link = links.nth(index);
-    const href = await link.getAttribute("href");
-    if (!href) continue;
-    try {
-      const normalized = new URL(href, page.url());
-      normalized.hash = "";
-      if (normalized.toString() === item.url) return link;
-    } catch {
-      // Ignora href non interpretabili.
+  const timeout = operationTimeout(15_000, `la ricerca del link ${item.url}`);
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const links = page.locator("a[href]");
+    const count = await links.count();
+    for (let index = 0; index < count; index += 1) {
+      const link = links.nth(index);
+      const href = await link.getAttribute("href");
+      if (!href) continue;
+      try {
+        const normalized = new URL(href, page.url());
+        normalized.hash = "";
+        if (normalized.toString() === item.url) return link;
+      } catch {
+        // Ignora href non interpretabili.
+      }
     }
+    await page.waitForTimeout(250);
   }
   throw new Error(`Link del candidato non trovato nella pagina risultati: ${item.url}.`);
 }
