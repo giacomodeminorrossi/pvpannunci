@@ -2,7 +2,7 @@ name: Controllo giornaliero PVP
 
 on:
   schedule:
-    - cron: "45 16 * * *"
+    - cron: "45 15 * * *"
   workflow_dispatch:
     inputs:
       target_date:
