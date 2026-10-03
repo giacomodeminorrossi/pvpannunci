@@ -64,6 +64,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp data/latest.json "$RUNNER_TEMP/latest.json"
+          git restore data/latest.json
+          git fetch origin main
+          git merge --ff-only origin/main
+          cp "$RUNNER_TEMP/latest.json" data/latest.json
           git add data/latest.json
 
           if git diff --cached --quiet; then
