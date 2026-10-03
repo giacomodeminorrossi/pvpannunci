@@ -449,6 +449,61 @@ async function firstUsefulHeading(page) {
   );
 }
 
+function extractListingAnnouncement(item) {
+  const listingText = item.listingText;
+  const location = unique([
+    readLabel(listingText, ["citt[aà]", "comune", "localit[aà]", "luogo"]),
+    readLabel(listingText, ["indirizzo"]),
+    readLabel(listingText, ["provincia"]),
+  ]).join(", ");
+
+  const courtOrProcedure = unique([
+    readLabel(listingText, ["tribunale", "ufficio giudiziario"]),
+    readLabel(listingText, [
+      "numero procedura",
+      "procedura",
+      "r\\.?g\\.?",
+      "registro generale",
+    ]),
+  ]).join(" - ");
+
+  const saleOrDeadlineDate =
+    toIsoDate(
+      readLabel(listingText, [
+        "data vendita",
+        "data della vendita",
+        "termine presentazione offerte",
+        "scadenza offerte",
+        "data asta",
+      ]),
+    ) || null;
+
+  const priceOrValue =
+    readLabel(listingText, [
+      "prezzo base",
+      "prezzo",
+      "valore",
+      "offerta minima",
+      "importo",
+    ]) || null;
+
+  const title =
+    item.listingTitle ||
+    readLabel(listingText, ["descrizione lotto", "descrizione", "tipologia"]) ||
+    null;
+
+  return {
+    title: title ? clean(title) : null,
+    location: location || null,
+    court_or_procedure: courtOrProcedure || null,
+    publication_date: item.listingPublicationDate,
+    sale_or_deadline_date: saleOrDeadlineDate,
+    price_or_value: priceOrValue,
+    official_url: item.url,
+    detail_verified: false,
+  };
+}
+
 async function extractAnnouncement(page, item) {
   ensureBudget(`la verifica dell'annuncio ${item.url}`);
   const response = await page.goto(item.url, {
@@ -518,6 +573,7 @@ async function extractAnnouncement(page, item) {
     sale_or_deadline_date: saleOrDeadlineDate,
     price_or_value: priceOrValue,
     official_url: item.url,
+    detail_verified: true,
   };
 }
 
@@ -583,12 +639,23 @@ try {
       if (error instanceof BudgetExceededError) throw error;
 
       coverage.complete = false;
-      const warning = structuredError(error, "announcement_unverified", {
+      const retainedFromListing = item.listingPublicationDate === targetDate;
+      const warning = structuredError(error, "announcement_detail_unverified", {
         official_url: item.url,
+        publication_date: item.listingPublicationDate,
+        detail_verified: false,
+        retained_from: retainedFromListing ? "result_listing" : null,
       });
       announcementErrors.push(warning);
       warnings.push(warning);
-      console.warn(`Avviso: ${warning.message} Continuo con gli altri annunci.`);
+
+      if (retainedFromListing) {
+        announcements.push(extractListingAnnouncement(item));
+      }
+
+      console.warn(
+        `Avviso: ${warning.message} ${retainedFromListing ? "Annuncio conservato con i soli dati della scheda risultati." : "Continuo con gli altri annunci."}`,
+      );
     }
   }
 } catch (error) {
@@ -604,6 +671,10 @@ try {
   }
 
   const deduplicated = deduplicateAnnouncements(announcements);
+  const verifiedCount = deduplicated.filter(
+    (announcement) => announcement.detail_verified === true,
+  ).length;
+  const unverifiedDetailCount = deduplicated.length - verifiedCount;
   const isPartial = !coverage.complete || warnings.length > 0 || errors.length > 0;
   const errorSummary = isPartial
     ? errors[0]?.message ||
@@ -632,7 +703,7 @@ try {
 
   if (isPartial) {
     console.warn(
-      `Controllo parziale per ${targetDate}: ${deduplicated.length} annunci verificati. La copertura è incompleta; un elenco vuoto non equivale a zero annunci.`,
+      `Controllo parziale per ${targetDate}: ${deduplicated.length} annunci conservati, ${verifiedCount} con dettaglio verificato e ${unverifiedDetailCount} con dettaglio non verificato. La copertura è incompleta; un elenco vuoto non equivale a zero annunci.`,
     );
     process.exitCode = 1;
   } else {
