@@ -49,6 +49,15 @@ jobs:
           TARGET_DATE: ${{ github.event.inputs.target_date || '' }}
         run: npm run scrape
 
+      - name: Carica la diagnostica dei dettagli non verificati
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pvp-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Salva il risultato
         if: always()
         shell: bash
