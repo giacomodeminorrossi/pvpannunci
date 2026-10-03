@@ -112,12 +112,13 @@ function publicationDateFrom(text) {
     "data\\s+di\\s+pubblicazione",
     "data\\s+pubblicazione",
     "pubblicato\\s+il",
+    "pubblicato\\s+sul\\s+portale\\s+il",
   ]);
   const labeledDate = toIsoDate(labeled);
   if (labeledDate) return labeledDate;
 
   const inline = String(text || "").match(
-    /(?:data\s+(?:di\s+)?pubblicazione|pubblicato\s+il)[^\d]{0,30}(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i,
+    /(?:data\s+(?:di\s+)?pubblicazione|pubblicato\s+(?:sul\s+portale\s+)?il)[^\d]{0,30}(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i,
   );
   return toIsoDate(inline?.[1]);
 }
@@ -215,6 +216,7 @@ function jsonLooksPertinent(value, item, responseUrl) {
     "idannuncio",
     "idannunciopvp",
     "datapubblicazione",
+    "datapubblicazioneportale",
     "descrizionelotto",
     "numeroprocedura",
   ]);
@@ -229,7 +231,12 @@ function jsonLooksPertinent(value, item, responseUrl) {
 function extractJsonDetails(payloads) {
   const entries = payloads.flatMap((payload) => scalarEntries(payload));
   const publicationDate = toIsoDate(
-    firstJsonValue(entries, ["dataPubblicazione", "publicationDate", "pubblicatoIl"]),
+    firstJsonValue(entries, [
+      "dataPubblicazione",
+      "dataPubblicazionePortale",
+      "publicationDate",
+      "pubblicatoIl",
+    ]),
   );
   const location = unique([
     firstJsonValue(entries, ["citta", "comune", "localita", "luogo"]),
@@ -393,7 +400,7 @@ async function waitForReadableDetail(page, response, context) {
             bodyText,
           );
         const hasPublicationDate =
-          /data\s+(?:di\s+)?pubblicazione|pubblicato\s+il/i.test(bodyText);
+          /data\s+(?:di\s+)?pubblicazione|pubblicato\s+(?:sul\s+portale\s+)?il/i.test(bodyText);
         const stateKey = "__pvpDetailReadiness";
         const now = performance.now();
         const previous = window[stateKey];
@@ -467,7 +474,7 @@ async function collectAnnouncementCards(page) {
         const text = element.innerText || element.textContent || "";
         return (
           text.length <= 8_000 &&
-          /data\s+(?:di\s+)?pubblicazione|pubblicato\s+il/i.test(text)
+          /data\s+(?:di\s+)?pubblicazione|pubblicato\s+(?:sul\s+portale\s+)?il/i.test(text)
         );
       });
       const compact = candidates.find((element) => {
@@ -631,6 +638,18 @@ async function firstUsefulHeading(page) {
   );
 }
 
+function procedureReferenceFrom(text) {
+  const number = readLabel(text, [
+    "n[°ºo]\\s*procedura",
+    "numero procedura",
+    "registro generale",
+    "r\\.?g\\.?",
+  ]);
+  const year = readLabel(text, ["anno procedura"]);
+  if (number && year && !number.includes(year)) return `${number}/${year}`;
+  return number || readLabel(text, ["procedura"]) || null;
+}
+
 function extractListingAnnouncement(item) {
   const listingText = item.listingText;
   const location = unique([
@@ -641,12 +660,7 @@ function extractListingAnnouncement(item) {
 
   const courtOrProcedure = unique([
     readLabel(listingText, ["tribunale", "ufficio giudiziario"]),
-    readLabel(listingText, [
-      "numero procedura",
-      "procedura",
-      "r\\.?g\\.?",
-      "registro generale",
-    ]),
+    procedureReferenceFrom(listingText),
   ]).join(" - ");
 
   const saleOrDeadlineDate =
@@ -851,7 +865,7 @@ async function extractAnnouncement(context, listPage, item) {
     ]).join(", ");
     const courtOrProcedure = unique([
       readLabel(bodyText, ["tribunale", "ufficio giudiziario"]),
-      readLabel(bodyText, ["numero procedura", "procedura", "r\\.?g\\.?", "registro generale"]),
+      procedureReferenceFrom(bodyText),
     ]).join(" - ");
     const saleOrDeadlineDate = toIsoDate(
       readLabel(bodyText, [
@@ -870,9 +884,9 @@ async function extractAnnouncement(context, listPage, item) {
       "importo",
     ]);
     const title =
-      (await firstUsefulHeading(detailPage)) ||
       readLabel(bodyText, ["descrizione lotto", "descrizione", "tipologia"]) ||
       jsonDetails.title ||
+      (await firstUsefulHeading(detailPage)) ||
       item.listingTitle ||
       item.listingText ||
       "Annuncio PVP";
