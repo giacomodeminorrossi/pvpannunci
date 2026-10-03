@@ -5,7 +5,8 @@ on:
     branches:
       - main
   schedule:
-    - cron: "45 15 * * *"
+    - cron: "0 21 * * *"
+    - cron: "0 22 * * *"
   workflow_dispatch:
     inputs:
       target_date:
@@ -28,29 +29,62 @@ jobs:
       TZ: Europe/Paris
 
     steps:
+      - name: Verifica orario locale e data target
+        id: schedule_guard
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_TARGET_DATE: ${{ github.event.inputs.target_date || '' }}
+        run: |
+          local_hour="$(TZ=Europe/Paris date +%H)"
+          local_date="$(TZ=Europe/Paris date +%F)"
+          local_timestamp="$(TZ=Europe/Paris date '+%Y-%m-%d %H:%M:%S %Z')"
+
+          echo "Ora locale Europe/Paris: $local_timestamp"
+
+          if [[ "$EVENT_NAME" == "schedule" && "$local_hour" != "23" ]]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Trigger programmato ignorato: l'ora locale Europe/Paris non è 23."
+            exit 0
+          fi
+
+          target_date="$local_date"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$MANUAL_TARGET_DATE" ]]; then
+            target_date="$MANUAL_TARGET_DATE"
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
+          echo "Data target: $target_date"
+
       - name: Scarica il repository
+        if: steps.schedule_guard.outputs.should_run == 'true'
         uses: actions/checkout@v4
 
       - name: Configura Node.js
+        if: steps.schedule_guard.outputs.should_run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
       - name: Installa le dipendenze
+        if: steps.schedule_guard.outputs.should_run == 'true'
         run: npm install --no-audit --no-fund
 
       - name: Installa Chromium
+        if: steps.schedule_guard.outputs.should_run == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Controlla gli annunci PVP
+        if: steps.schedule_guard.outputs.should_run == 'true'
         id: scrape
         continue-on-error: true
         env:
-          TARGET_DATE: ${{ github.event.inputs.target_date || '' }}
+          TARGET_DATE: ${{ steps.schedule_guard.outputs.target_date }}
         run: npm run scrape
 
       - name: Carica la diagnostica dei dettagli non verificati
-        if: always()
+        if: always() && steps.schedule_guard.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: pvp-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
@@ -59,7 +93,7 @@ jobs:
           retention-days: 14
 
       - name: Salva il risultato
-        if: always()
+        if: always() && steps.schedule_guard.outputs.should_run == 'true'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -79,7 +113,7 @@ jobs:
           fi
 
       - name: Segnala un controllo non completato
-        if: steps.scrape.outcome == 'failure'
+        if: steps.schedule_guard.outputs.should_run == 'true' && steps.scrape.outcome == 'failure'
         run: |
           echo "Lo scraper non ha completato il controllo. Consultare data/latest.json."
           exit 1
