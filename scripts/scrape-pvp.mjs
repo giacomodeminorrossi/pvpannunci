@@ -9,8 +9,8 @@ const TIME_ZONE = "Europe/Paris";
 const PAGE_SIZE = 48;
 const MAX_PAGES = 200;
 const NAVIGATION_TIMEOUT_MS = 60_000;
-const DETAIL_CONTENT_TIMEOUT_MS = 30_000;
-const DETAIL_STABILITY_MS = 2_000;
+const DETAIL_CONTENT_TIMEOUT_MS = 15_000;
+const DETAIL_STABILITY_MS = 1_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = resolve(__dirname, "../data/latest.json");
 
@@ -141,19 +141,29 @@ async function waitForReadableDetail(page, response, context) {
     throw new Error(`Risposta HTTP ${response.status()} per ${context}.`);
   }
 
-  await page.waitForLoadState("load", { timeout: DETAIL_CONTENT_TIMEOUT_MS }).catch(() => {});
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+  const deadline = Date.now() + DETAIL_CONTENT_TIMEOUT_MS;
+  await page
+    .waitForLoadState("load", { timeout: Math.min(5_000, DETAIL_CONTENT_TIMEOUT_MS) })
+    .catch(() => {});
 
   try {
     await page.waitForFunction(
       ({ stabilityMs }) => {
         const bodyText = (document.body?.innerText || "").replace(/\\s+/g, " ").trim();
+        const blocked =
+          /captcha|accesso negato|access denied|forbidden|temporaneamente non disponibile|service unavailable|richiesta non autorizzata/i.test(
+            bodyText,
+          );
+        const hasPublicationDate =
+          /data\\s+(?:di\\s+)?pubblicazione|pubblicato\\s+il/i.test(bodyText);
         const stateKey = "__pvpDetailReadiness";
         const now = performance.now();
         const previous = window[stateKey];
 
-        if (!bodyText) {
-          window[stateKey] = { text: "", since: now };
+        if (blocked) return true;
+
+        if (!hasPublicationDate) {
+          window[stateKey] = null;
           return false;
         }
 
@@ -165,7 +175,7 @@ async function waitForReadableDetail(page, response, context) {
         return now - previous.since >= stabilityMs;
       },
       { stabilityMs: DETAIL_STABILITY_MS },
-      { polling: 250, timeout: DETAIL_CONTENT_TIMEOUT_MS },
+      { polling: 250, timeout: Math.max(1, deadline - Date.now()) },
     );
   } catch {
     const bodyText = await page.locator("body").innerText().catch(() => "");
@@ -181,7 +191,7 @@ async function waitForReadableDetail(page, response, context) {
     }
 
     throw new Error(
-      `Contenuto non stabilizzato per ${context} entro ${DETAIL_CONTENT_TIMEOUT_MS} ms.`,
+      `Contenuto o data di pubblicazione non leggibile per ${context} entro ${DETAIL_CONTENT_TIMEOUT_MS} ms.`,
     );
   }
 
