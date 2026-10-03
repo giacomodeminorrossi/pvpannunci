@@ -36,7 +36,7 @@ function todayInParis() {
   }).format(new Date());
 }
 
-const targetDate = process.env.TARGET_DATE || "2026-09-28";
+const targetDate = process.env.TARGET_DATE || todayInParis();
 
 function clean(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
