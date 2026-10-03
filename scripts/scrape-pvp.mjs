@@ -9,6 +9,8 @@ const TIME_ZONE = "Europe/Paris";
 const PAGE_SIZE = 48;
 const MAX_PAGES = 200;
 const NAVIGATION_TIMEOUT_MS = 60_000;
+const DETAIL_CONTENT_TIMEOUT_MS = 30_000;
+const DETAIL_STABILITY_MS = 2_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = resolve(__dirname, "../data/latest.json");
 
@@ -130,6 +132,62 @@ async function assertUsablePage(page, response, context) {
   return bodyText;
 }
 
+async function waitForReadableDetail(page, response, context) {
+  if (!response) {
+    throw new Error(`Nessuna risposta HTTP ricevuta per ${context}.`);
+  }
+
+  if (!response.ok()) {
+    throw new Error(`Risposta HTTP ${response.status()} per ${context}.`);
+  }
+
+  await page.waitForLoadState("load", { timeout: DETAIL_CONTENT_TIMEOUT_MS }).catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+
+  try {
+    await page.waitForFunction(
+      ({ stabilityMs }) => {
+        const bodyText = (document.body?.innerText || "").replace(/\\s+/g, " ").trim();
+        const stateKey = "__pvpDetailReadiness";
+        const now = performance.now();
+        const previous = window[stateKey];
+
+        if (!bodyText) {
+          window[stateKey] = { text: "", since: now };
+          return false;
+        }
+
+        if (!previous || previous.text !== bodyText) {
+          window[stateKey] = { text: bodyText, since: now };
+          return false;
+        }
+
+        return now - previous.since >= stabilityMs;
+      },
+      { stabilityMs: DETAIL_STABILITY_MS },
+      { polling: 250, timeout: DETAIL_CONTENT_TIMEOUT_MS },
+    );
+  } catch {
+    const bodyText = await page.locator("body").innerText().catch(() => "");
+
+    if (looksBlocked(bodyText)) {
+      throw new Error(`Il sito PVP ha bloccato o interrotto l'accesso per ${context}.`);
+    }
+
+    if (!clean(bodyText)) {
+      throw new Error(
+        `Pagina vuota o illeggibile per ${context} dopo ${DETAIL_CONTENT_TIMEOUT_MS} ms di attesa.`,
+      );
+    }
+
+    throw new Error(
+      `Contenuto non stabilizzato per ${context} entro ${DETAIL_CONTENT_TIMEOUT_MS} ms.`,
+    );
+  }
+
+  return assertUsablePage(page, response, context);
+}
+
 async function collectAnnouncementLinks(page) {
   const rawLinks = await page.locator("a[href]").evaluateAll((anchors) =>
     anchors.map((anchor) => ({
@@ -218,8 +276,11 @@ async function extractAnnouncement(page, item) {
     waitUntil: "domcontentloaded",
     timeout: NAVIGATION_TIMEOUT_MS,
   });
-  const bodyText = await assertUsablePage(page, response, `l'annuncio ${item.url}`);
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+  const bodyText = await waitForReadableDetail(
+    page,
+    response,
+    `l'annuncio ${item.url}`,
+  );
 
   const publicationDate =
     publicationDateFrom(bodyText) || publicationDateFrom(item.listingText);
@@ -294,6 +355,15 @@ async function saveResult(payload) {
 
 let browser;
 const announcements = [];
+const announcementErrors = [];
+
+function deduplicateAnnouncements(values) {
+  return [
+    ...new Map(
+      values.map((announcement) => [announcement.official_url, announcement]),
+    ).values(),
+  ];
+}
 
 try {
   browser = await chromium.launch({ headless: true });
@@ -314,31 +384,43 @@ try {
   const resultLinks = await collectAllResultLinks(page);
 
   for (const item of resultLinks) {
-    const announcement = await extractAnnouncement(page, item);
-    if (announcement) announcements.push(announcement);
+    try {
+      const announcement = await extractAnnouncement(page, item);
+      if (announcement) announcements.push(announcement);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const warning = { official_url: item.url, error: message };
+      announcementErrors.push(warning);
+      console.warn(`Avviso: ${message} Continuo con gli altri annunci.`);
+    }
   }
 
-  const deduplicated = [
-    ...new Map(
-      announcements.map((announcement) => [
-        announcement.official_url,
-        announcement,
-      ]),
-    ).values(),
-  ];
+  const deduplicated = deduplicateAnnouncements(announcements);
+  const isPartial = announcementErrors.length > 0;
+  const partialError = isPartial
+    ? `${announcementErrors.length} annunci non sono stati verificati; il risultato è incompleto.`
+    : null;
 
   await saveResult({
     checked_at: new Date().toISOString(),
     target_date: targetDate,
     source_url: SOURCE_URL,
-    status: "success",
-    error: null,
+    status: isPartial ? "partial" : "success",
+    error: partialError,
+    announcement_errors: announcementErrors,
     announcements: deduplicated,
   });
 
-  console.log(
-    `Controllo completato per ${targetDate}: ${deduplicated.length} annunci verificati.`,
-  );
+  if (isPartial) {
+    console.warn(
+      `Controllo parziale per ${targetDate}: ${deduplicated.length} annunci verificati, ${announcementErrors.length} non verificati. Non è possibile concludere che non esistano annunci se l'elenco verificato è vuoto.`,
+    );
+    process.exitCode = 1;
+  } else {
+    console.log(
+      `Controllo completato per ${targetDate}: ${deduplicated.length} annunci verificati.`,
+    );
+  }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
 
@@ -348,14 +430,8 @@ try {
     source_url: SOURCE_URL,
     status: "error",
     error: message,
-    announcements: [
-      ...new Map(
-        announcements.map((announcement) => [
-          announcement.official_url,
-          announcement,
-        ]),
-      ).values(),
-    ],
+    announcement_errors: announcementErrors,
+    announcements: deduplicateAnnouncements(announcements),
   });
 
   console.error(`Controllo PVP non completato: ${message}`);
