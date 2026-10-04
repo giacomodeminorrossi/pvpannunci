@@ -2,6 +2,26 @@ import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  BLOCKED_PATTERN,
+  PUBLICATION_LABEL_PATTERN,
+  announcementIdFrom,
+  baseAuctionPriceFrom,
+  clean,
+  courtOrProcedureFrom,
+  creditDescriptionFrom,
+  deduplicateAnnouncements,
+  extractJsonDetails,
+  isAnnouncementUrl,
+  isValidIsoDate,
+  jsonLooksPertinent,
+  looksBlocked,
+  looksLikeNoResults,
+  publicationDateFrom,
+  saleOrDeadlineDateFrom,
+  sanitizeOfficialUrl,
+  titleFrom,
+} from "./lib/parse.mjs";
 
 const SOURCE_URL =
   "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25";
@@ -15,6 +35,7 @@ const DETAIL_CONTENT_TIMEOUT_MS = 15_000;
 const DETAIL_STABILITY_MS = 1_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = resolve(__dirname, "../data/latest.json");
+const HISTORY_PATH = resolve(__dirname, "../data/history");
 const DIAGNOSTICS_PATH = resolve(__dirname, "../diagnostics");
 const startedAt = Date.now();
 const deadlineAt = startedAt + GLOBAL_BUDGET_MS;
@@ -38,343 +59,8 @@ function todayInParis() {
 
 const targetDate = process.env.TARGET_DATE || todayInParis();
 
-function clean(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function unique(values) {
-  return [...new Set(values.map(clean).filter(Boolean))];
-}
-
-function toIsoDate(value) {
-  const match = String(value || "").match(/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})\b/);
-  if (!match) return null;
-
-  const [, day, month, year] = match;
-  const candidate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-  const date = new Date(`${candidate}T00:00:00Z`);
-  if (
-    Number.isNaN(date.getTime()) ||
-    date.getUTCFullYear() !== Number(year) ||
-    date.getUTCMonth() + 1 !== Number(month) ||
-    date.getUTCDate() !== Number(day)
-  ) {
-    return null;
-  }
-  return candidate;
-}
-
-function isValidIsoDate(value) {
-  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return false;
-
-  const [, year, month, day] = match;
-  const date = new Date(`${value}T00:00:00Z`);
-  return (
-    !Number.isNaN(date.getTime()) &&
-    date.getUTCFullYear() === Number(year) &&
-    date.getUTCMonth() + 1 === Number(month) &&
-    date.getUTCDate() === Number(day)
-  );
-}
-
-function linesOf(text) {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map(clean)
-    .filter(Boolean);
-}
-
-function readLabel(text, labels) {
-  const lines = linesOf(text);
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-
-    for (const label of labels) {
-      const matcher = new RegExp(`^${label}\\s*(?::|-)?\\s*(.*)$`, "i");
-      const match = line.match(matcher);
-      if (!match) continue;
-
-      const sameLine = clean(match[1]);
-      if (sameLine) return sameLine;
-
-      const nextLine = clean(lines[index + 1]);
-      if (nextLine) return nextLine;
-    }
-  }
-
-  return null;
-}
-
-const CREDIT_DESCRIPTION_LABELS = [
-  "descrizione\\s+(?:del\\s+)?credito",
-  "descrizione\\s+(?:del\\s+)?lotto",
-  "descrizione\\s+(?:del\\s+)?bene",
-  "descrizione",
-];
-
-const FIELD_BOUNDARY_LABELS = [
-  "categoria",
-  "tipologia",
-  "tribunale",
-  "ufficio\\s+giudiziario",
-  "n[°ºo]\\s*procedura",
-  "numero\\s+procedura",
-  "anno\\s+procedura",
-  "procedura",
-  "registro\\s+generale",
-  "r\\.?g\\.?",
-  "data\\s+(?:di\\s+)?pubblicazione",
-  "pubblicato\\s+(?:sul\\s+portale\\s+)?il",
-  "data\\s+(?:della\\s+)?vendita",
-  "vendita$",
-  "termine\\s+presentazione\\s+offerte",
-  "scadenza\\s+offerte",
-  "data\\s+asta",
-  "prezzo\\s+base(?:\\s+d['’]asta)?",
-  "offerta\\s+minima",
-  "modalit[aà]\\s+(?:di\\s+)?vendita",
-  "luogo\\s+(?:di\\s+)?vendita",
-  "ubicazione",
-  "indirizzo",
-  "citt[aà]",
-  "comune",
-  "localit[aà]",
-  "provincia",
-  "custode",
-  "delegato",
-  "professionista",
-  "giudice",
-  "numero\\s+lotto",
-  "codice\\s+lotto",
-  "dati\\s+(?:del|della)\\s+(?:bene|lotto|procedura|vendita)",
-  "documenti",
-  "allegati",
-];
-
-function matchLabel(line, label) {
-  return line.match(new RegExp(`^${label}\\s*(?::|-)?\\s*(.*)$`, "i"));
-}
-
-function readLabelBlock(text, labels, stopLabels) {
-  const lines = linesOf(text);
-
-  for (let index = 0; index < lines.length; index += 1) {
-    for (const label of labels) {
-      const match = matchLabel(lines[index], label);
-      if (!match) continue;
-
-      const values = [];
-      const sameLine = clean(match[1]);
-      if (sameLine) values.push(sameLine);
-
-      for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
-        const line = lines[cursor];
-        if (stopLabels.some((stopLabel) => matchLabel(line, stopLabel))) break;
-        values.push(line);
-      }
-
-      const value = clean(values.join(" "));
-      if (value) return value;
-    }
-  }
-
-  return null;
-}
-
-function normalizeCreditDescription(value) {
-  return clean(value)
-    .replace(/\\s+([,.;:!?])/g, "$1")
-    .replace(/([([{])\\s+/g, "$1")
-    .replace(/([.!?])(?=[A-ZÀ-ÖØ-Þ])/g, "$1 ")
-    .replace(/([:;])(?=[A-Za-zÀ-ÖØ-öø-ÿ])/g, "$1 ")
-    .replace(/([a-zà-öø-ÿ])(?=[A-ZÀ-ÖØ-Þ])/g, "$1 ")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])(?=\\d)/g, "$1 ")
-    .replace(/(\\d)(?=[A-Za-zÀ-ÖØ-öø-ÿ])/g, "$1 ")
-    .replace(/\\s+/g, " ")
-    .trim();
-}
-
-function creditDescriptionFrom(text) {
-  const value = readLabelBlock(text, CREDIT_DESCRIPTION_LABELS, FIELD_BOUNDARY_LABELS);
-  return value ? normalizeCreditDescription(value) : null;
-}
-
-function baseAuctionPriceFrom(text) {
-  return readLabel(text, [
-    "prezzo\\s+base\\s+d['’]asta",
-    "prezzo\\s+base",
-    "base\\s+d['’]asta",
-  ]);
-}
-
-function publicationDateFrom(text) {
-  const labeled = readLabel(text, [
-    "data\\s+di\\s+pubblicazione",
-    "data\\s+pubblicazione",
-    "pubblicato\\s+il",
-    "pubblicato\\s+sul\\s+portale\\s+il",
-  ]);
-  const labeledDate = toIsoDate(labeled);
-  if (labeledDate) return labeledDate;
-
-  const inline = String(text || "").match(
-    /(?:data\s+(?:di\s+)?pubblicazione|pubblicato\s+(?:sul\s+portale\s+)?il)[^\d]{0,30}(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i,
-  );
-  return toIsoDate(inline?.[1]);
-}
-
-function looksBlocked(text) {
-  return /captcha|accesso negato|access denied|forbidden|temporaneamente non disponibile|service unavailable|richiesta non autorizzata/i.test(
-    text,
-  );
-}
-
-function looksLikeNoResults(text) {
-  return /nessun(?:o)?\s+(?:annuncio|risultat|element)|non sono stati trovati risultati|0\s+risultati/i.test(
-    text,
-  );
-}
-
-function isAnnouncementUrl(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname !== "pvp.giustizia.it") return false;
-
-    const candidate = `${parsed.pathname}${parsed.search}`;
-    return (
-      /(?:detail|dettaglio)[^/?#]*annuncio/i.test(candidate) ||
-      /annuncio[^/?#]*(?:detail|dettaglio)/i.test(candidate) ||
-      /[?&](?:idAnnuncio|idInserzione)=/i.test(candidate)
-    );
-  } catch {
-    return false;
-  }
-}
-
-function announcementIdFrom(url) {
-  try {
-    const parsed = new URL(url);
-    return parsed.searchParams.get("idAnnuncio") || parsed.searchParams.get("idInserzione");
-  } catch {
-    return null;
-  }
-}
-
-function sanitizeOfficialUrl(value) {
-  try {
-    const url = new URL(value);
-    if (url.hostname !== "pvp.giustizia.it") return null;
-    for (const key of [...url.searchParams.keys()]) {
-      if (/auth|authorization|cookie|csrf|jwt|key|password|secret|session|token/i.test(key)) {
-        url.searchParams.delete(key);
-      }
-    }
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
-function normalizedKey(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/gi, "")
-    .toLowerCase();
-}
-
-function scalarEntries(value, path = [], result = [], depth = 0) {
-  if (depth > 8 || result.length >= 2_000 || value === null || value === undefined) {
-    return result;
-  }
-  if (Array.isArray(value)) {
-    for (const [index, child] of value.entries()) {
-      scalarEntries(child, [...path, String(index)], result, depth + 1);
-    }
-  } else if (typeof value === "object") {
-    for (const [key, child] of Object.entries(value)) {
-      scalarEntries(child, [...path, key], result, depth + 1);
-    }
-  } else if (["string", "number", "boolean"].includes(typeof value)) {
-    result.push({ path, key: normalizedKey(path.at(-1)), value: clean(value) });
-  }
-  return result;
-}
-
-function firstJsonValue(entries, keys) {
-  const wanted = new Set(keys.map(normalizedKey));
-  return entries.find((entry) => wanted.has(entry.key) && entry.value)?.value || null;
-}
-
-function jsonLooksPertinent(value, item, responseUrl) {
-  const entries = scalarEntries(value);
-  const identifier = announcementIdFrom(item.url);
-  const hasIdentifier = identifier && entries.some((entry) => entry.value === identifier);
-  const responseIdentifier = announcementIdFrom(responseUrl);
-  const relevantKeys = new Set([
-    "idannuncio",
-    "idannunciopvp",
-    "datapubblicazione",
-    "datapubblicazioneportale",
-    "descrizionelotto",
-    "numeroprocedura",
-  ]);
-  const hasRelevantKeys = entries.some((entry) => relevantKeys.has(entry.key));
-  const endpointMatches = identifier && responseIdentifier === identifier;
-  return {
-    pertinent: Boolean(hasIdentifier || (endpointMatches && hasRelevantKeys)),
-    entries,
-  };
-}
-
-function extractJsonDetails(payloads) {
-  const entries = payloads.flatMap((payload) => scalarEntries(payload));
-  const publicationDate = toIsoDate(
-    firstJsonValue(entries, [
-      "dataPubblicazione",
-      "dataPubblicazionePortale",
-      "publicationDate",
-      "pubblicatoIl",
-    ]),
-  );
-  const courtOrProcedure = unique([
-    firstJsonValue(entries, ["tribunale", "ufficioGiudiziario"]),
-    firstJsonValue(entries, ["numeroProcedura", "procedura", "registroGenerale", "rg"]),
-  ]).join(" - ");
-
-  return {
-    title: firstJsonValue(entries, ["descrizioneLotto", "descrizione", "titolo", "tipologia"]),
-    credit_description: normalizeCreditDescription(
-      firstJsonValue(entries, [
-        "descrizioneCredito",
-        "descrizioneLotto",
-        "descrizioneBene",
-        "lotDescription",
-        "descrizione",
-      ]),
-    ) || null,
-    court_or_procedure: courtOrProcedure || null,
-    publication_date: publicationDate,
-    sale_or_deadline_date: toIsoDate(
-      firstJsonValue(entries, [
-        "dataVendita",
-        "dataDellaVendita",
-        "terminePresentazioneOfferte",
-        "scadenzaOfferte",
-        "dataAsta",
-      ]),
-    ),
-    base_auction_price: firstJsonValue(entries, [
-      "prezzoBaseAsta",
-      "prezzoBaseDasta",
-      "prezzoBase",
-      "baseAuctionPrice",
-    ]),
-  };
-}
+// Nomi di chiavi e attributi da non riportare nella diagnostica.
+const SENSITIVE_NAME_PATTERN = /auth|cookie|csrf|jwt|password|secret|session|token/i;
 
 function startNetworkCapture(context, item) {
   const responses = [];
@@ -404,12 +90,11 @@ function startNetworkCapture(context, item) {
         summary.top_level_keys =
           json && typeof json === "object" && !Array.isArray(json)
             ? Object.keys(json)
-                .filter((key) => !/auth|cookie|csrf|jwt|password|secret|session|token/i.test(key))
+                .filter((key) => !SENSITIVE_NAME_PATTERN.test(key))
                 .slice(0, 50)
             : [];
-        const match = jsonLooksPertinent(json, item, safeUrl);
-        summary.pertinent = match.pertinent;
-        if (match.pertinent) payloads.push(json);
+        summary.pertinent = jsonLooksPertinent(json, item.url, safeUrl);
+        if (summary.pertinent) payloads.push(json);
       } catch {
         // La risposta non contiene JSON leggibile; il riepilogo resta metadato-only.
       }
@@ -497,14 +182,10 @@ async function waitForReadableDetail(page, response, context) {
 
   try {
     await page.waitForFunction(
-      ({ stabilityMs }) => {
+      ({ stabilityMs, blockedSource, publicationSource }) => {
         const bodyText = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
-        const blocked =
-          /captcha|accesso negato|access denied|forbidden|temporaneamente non disponibile|service unavailable|richiesta non autorizzata/i.test(
-            bodyText,
-          );
-        const hasPublicationDate =
-          /data\s+(?:di\s+)?pubblicazione|pubblicato\s+(?:sul\s+portale\s+)?il/i.test(bodyText);
+        const blocked = new RegExp(blockedSource, "i").test(bodyText);
+        const hasPublicationDate = new RegExp(publicationSource, "i").test(bodyText);
         const stateKey = "__pvpDetailReadiness";
         const now = performance.now();
         const previous = window[stateKey];
@@ -523,7 +204,11 @@ async function waitForReadableDetail(page, response, context) {
 
         return now - previous.since >= stabilityMs;
       },
-      { stabilityMs: DETAIL_STABILITY_MS },
+      {
+        stabilityMs: DETAIL_STABILITY_MS,
+        blockedSource: BLOCKED_PATTERN.source,
+        publicationSource: PUBLICATION_LABEL_PATTERN.source,
+      },
       { polling: 250, timeout: Math.max(1, deadline - Date.now()) },
     );
   } catch {
@@ -550,8 +235,9 @@ async function waitForReadableDetail(page, response, context) {
 }
 
 async function collectAnnouncementCards(page) {
-  const rawLinks = await page.locator("a[href]").evaluateAll((anchors) =>
-    anchors.map((anchor) => {
+  const rawLinks = await page.locator("a[href]").evaluateAll((anchors, publicationSource) => {
+    const publicationPattern = new RegExp(publicationSource, "i");
+    return anchors.map((anchor) => {
       const candidates = [];
       const selectors = [
         "article",
@@ -576,10 +262,7 @@ async function collectAnnouncementCards(page) {
 
       const withPublicationDate = candidates.find((element) => {
         const text = element.innerText || element.textContent || "";
-        return (
-          text.length <= 8_000 &&
-          /data\s+(?:di\s+)?pubblicazione|pubblicato\s+(?:sul\s+portale\s+)?il/i.test(text)
-        );
+        return text.length <= 8_000 && publicationPattern.test(text);
       });
       const compact = candidates.find((element) => {
         const text = element.innerText || element.textContent || "";
@@ -592,8 +275,8 @@ async function collectAnnouncementCards(page) {
         linkText: anchor.innerText || anchor.textContent || "",
         listingText: container.innerText || container.textContent || "",
       };
-    }),
-  );
+    });
+  }, PUBLICATION_LABEL_PATTERN.source);
 
   const byUrl = new Map();
   for (const item of rawLinks) {
@@ -742,47 +425,16 @@ async function firstUsefulHeading(page) {
   );
 }
 
-function procedureReferenceFrom(text) {
-  const number = readLabel(text, [
-    "n[°ºo]\\s*procedura",
-    "numero procedura",
-    "registro generale",
-    "r\\.?g\\.?",
-  ]);
-  const year = readLabel(text, ["anno procedura"]);
-  if (number && year && !number.includes(year)) return `${number}/${year}`;
-  return number || readLabel(text, ["procedura"]) || null;
-}
-
 function extractListingAnnouncement(item) {
   const listingText = item.listingText;
-  const courtOrProcedure = unique([
-    readLabel(listingText, ["tribunale", "ufficio giudiziario"]),
-    procedureReferenceFrom(listingText),
-  ]).join(" - ");
-
-  const saleOrDeadlineDate =
-    toIsoDate(
-      readLabel(listingText, [
-        "data vendita",
-        "data della vendita",
-        "termine presentazione offerte",
-        "scadenza offerte",
-        "data asta",
-      ]),
-    ) || null;
-
-  const title =
-    item.listingTitle ||
-    readLabel(listingText, ["descrizione lotto", "descrizione", "tipologia"]) ||
-    null;
+  const title = item.listingTitle || titleFrom(listingText);
 
   return {
     title: title ? clean(title) : null,
     credit_description: creditDescriptionFrom(listingText),
-    court_or_procedure: courtOrProcedure || null,
+    court_or_procedure: courtOrProcedureFrom(listingText),
     publication_date: item.listingPublicationDate,
-    sale_or_deadline_date: saleOrDeadlineDate,
+    sale_or_deadline_date: saleOrDeadlineDateFrom(listingText),
     base_auction_price: baseAuctionPriceFrom(listingText),
     official_url: item.url,
     detail_verified: false,
@@ -794,19 +446,23 @@ async function findCandidateLink(page, item) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const links = page.locator("a[href]");
-    const count = await links.count();
-    for (let index = 0; index < count; index += 1) {
-      const link = links.nth(index);
-      const href = await link.getAttribute("href");
-      if (!href) continue;
-      try {
-        const normalized = new URL(href, page.url());
-        normalized.hash = "";
-        if (normalized.toString() === item.url) return link;
-      } catch {
-        // Ignora href non interpretabili.
-      }
-    }
+    // Un solo passaggio nel browser invece di una chiamata per ogni link.
+    const index = await links
+      .evaluateAll(
+        (anchors, targetUrl) =>
+          anchors.findIndex((anchor) => {
+            try {
+              const normalized = new URL(anchor.getAttribute("href"), document.baseURI);
+              normalized.hash = "";
+              return normalized.toString() === targetUrl;
+            } catch {
+              return false;
+            }
+          }),
+        item.url,
+      )
+      .catch(() => -1);
+    if (index >= 0) return links.nth(index);
     await page.waitForTimeout(250);
   }
   throw new Error(`Link del candidato non trovato nella pagina risultati: ${item.url}.`);
@@ -831,7 +487,8 @@ async function waitForClickedDetail(context, listPage, beforePages, beforeUrl, b
 }
 
 async function sanitizedHtml(page) {
-  return page.evaluate(() => {
+  return page.evaluate((sensitiveSource) => {
+    const sensitivePattern = new RegExp(sensitiveSource, "i");
     const clone = document.documentElement.cloneNode(true);
     clone.querySelectorAll("script, noscript").forEach((element) => element.remove());
     clone.querySelectorAll("input[type='hidden']").forEach((element) => {
@@ -839,18 +496,21 @@ async function sanitizedHtml(page) {
     });
     clone.querySelectorAll("*").forEach((element) => {
       for (const attribute of [...element.attributes]) {
-        if (/auth|cookie|csrf|jwt|password|secret|session|token/i.test(attribute.name)) {
+        if (sensitivePattern.test(attribute.name)) {
           element.removeAttribute(attribute.name);
         }
       }
     });
     return `<!doctype html>\n${clone.outerHTML}`;
-  });
+  }, SENSITIVE_NAME_PATTERN.source);
 }
 
 async function saveDiagnostics(page, item, networkResponses, error) {
-  const id = announcementIdFrom(item.url) || `candidate-${Date.now()}`;
-  const directory = resolve(DIAGNOSTICS_PATH, id.replace(/[^a-zA-Z0-9_-]/g, "_"));
+  const id = (announcementIdFrom(item.url) || `candidate-${Date.now()}`).replace(
+    /[^a-zA-Z0-9_-]/g,
+    "_",
+  );
+  const directory = resolve(DIAGNOSTICS_PATH, id);
   await mkdir(directory, { recursive: true });
   const paths = {
     html: `diagnostics/${id}/detail.html`,
@@ -947,23 +607,12 @@ async function extractAnnouncement(context, listPage, item) {
     }
     if (publicationDate !== targetDate) return null;
 
-    const courtOrProcedure = unique([
-      readLabel(bodyText, ["tribunale", "ufficio giudiziario"]),
-      procedureReferenceFrom(bodyText),
-    ]).join(" - ");
-    const saleOrDeadlineDate = toIsoDate(
-      readLabel(bodyText, [
-        "data vendita",
-        "data della vendita",
-        "termine presentazione offerte",
-        "scadenza offerte",
-        "data asta",
-      ]),
-    );
+    const courtOrProcedure = courtOrProcedureFrom(bodyText);
+    const saleOrDeadlineDate = saleOrDeadlineDateFrom(bodyText);
     const creditDescription = creditDescriptionFrom(bodyText);
     const baseAuctionPrice = baseAuctionPriceFrom(bodyText);
     const title =
-      readLabel(bodyText, ["descrizione lotto", "descrizione", "tipologia"]) ||
+      titleFrom(bodyText) ||
       jsonDetails.title ||
       (await firstUsefulHeading(detailPage)) ||
       item.listingTitle ||
@@ -996,17 +645,14 @@ async function extractAnnouncement(context, listPage, item) {
   }
 }
 
-function deduplicateAnnouncements(values) {
-  return [
-    ...new Map(
-      values.map((announcement) => [announcement.official_url, announcement]),
-    ).values(),
-  ];
-}
-
 async function saveResult(payload) {
-  await mkdir(dirname(OUTPUT_PATH), { recursive: true });
-  await writeFile(OUTPUT_PATH, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  const content = `${JSON.stringify(payload, null, 2)}\n`;
+  await mkdir(HISTORY_PATH, { recursive: true });
+  await writeFile(OUTPUT_PATH, content, "utf8");
+  // Una copia per data, così un controllo successivo non cancella i risultati precedenti.
+  if (isValidIsoDate(payload.target_date)) {
+    await writeFile(resolve(HISTORY_PATH, `${payload.target_date}.json`), content, "utf8");
+  }
 }
 
 let browser;

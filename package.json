@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Controllo giornaliero degli annunci PVP configurati",
   "scripts": {
-    "scrape": "node scripts/scrape-pvp.mjs"
+    "scrape": "node scripts/scrape-pvp.mjs",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "playwright": "1.63.0"
