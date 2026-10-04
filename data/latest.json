@@ -1,6 +1,6 @@
 {
-  "checked_at": "2026-10-04T07:28:33.018Z",
-  "target_date": "2026-09-18",
+  "checked_at": "2026-10-04T07:33:48.316Z",
+  "target_date": "2026-09-15",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
   "status": "success",
   "error": null,
@@ -10,46 +10,45 @@
     "complete": true,
     "pages_checked": 2,
     "listings_seen": 96,
-    "candidates_found": 3,
-    "candidates_checked": 3,
-    "stop_reason": "page_only_older_dates"
+    "candidates_found": 1,
+    "candidates_checked": 1,
+    "stop_reason": "page_only_older_dates",
+    "pages": [
+      {
+        "page": 1,
+        "listings": 48,
+        "newest": "2026-10-03",
+        "oldest": "2026-09-10",
+        "undated": 0,
+        "ordered": true
+      },
+      {
+        "page": 2,
+        "listings": 48,
+        "newest": "2026-09-10",
+        "oldest": "2026-08-25",
+        "undated": 0,
+        "ordered": true
+      }
+    ],
+    "first_page_reloads": 1,
+    "site_newest_date": "2026-10-03"
   },
   "announcement_errors": [],
   "announcements": [
     {
-      "title": "LOTTO UNICO composto da: 1) CREDITO IRES, derivante dalle ritenute maturate su interessi attivi ad…",
-      "credit_description": "LOTTO UNICO composto da: 1) CREDITO IRES, derivante dalle ritenute maturate su interessi attivi ad oggi pari ad € 4.560,96 oltre alle eventuali variazioni in aumento fino alla chiusura del conto corrente della procedura; 2) CREDITO IVA finale ad oggi pari ad € 16.016,00 oltre al credito stimato in € 9.152,00 (o altro minore o maggiore importo) che sarà determinato in via definitiva a seguito della successiva liquidazione del compenso finale del Curatore (SI RIMANDA ALLE AVVERTENZE IN BANDO D'ASTA)",
-      "court_or_procedure": "Tribunale di BERGAMO - 174/2015",
-      "publication_date": "2026-09-18",
-      "sale_type": "Senza Incanto",
-      "sale_date": "2026-10-20T15:30",
-      "offer_deadline": "2026-10-19T12:00",
-      "base_auction_price": "15.240,50 €",
-      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4632674",
-      "detail_verified": true
-    },
-    {
-      "title": "N° 28.263 azioni dal valore nominale unitario di € 1,00, corrispondenti a circa il 4,26% del…",
-      "credit_description": "N° 28.263 azioni dal valore nominale unitario di € 1,00, corrispondenti a circa il 4,26% del capitale sociale e quindi pari complessivamente a nominali € 28.263,00, della società “SERVIZI LOGISTICI S.p.A.”. La descrizione dettagliata è riportata in avviso di vendita e la documentazione è caricata in Virtual Data Room (in breve “VDR”) accessibile dal link https://trasformazioneterritoriale.asteannunci.it. Vendita competitiva telematica sul portale www.doauction.it/www.astemobili.i",
-      "court_or_procedure": "Tribunale di PADOVA - 298/2013",
-      "publication_date": "2026-09-18",
+      "title": "Lotto costituito da 18 Titoli PAC, meglio descritti nell'avviso e nella perizia.",
+      "credit_description": "Lotto costituito da 18 Titoli PAC, meglio descritti nell'avviso e nella perizia.",
+      "asset_descriptions": [
+        "Lotto costituito da 18 Titoli PAC, meglio descritti nell'avviso e nella perizia."
+      ],
+      "court_or_procedure": "Tribunale di ALESSANDRIA - 2353/2025",
+      "publication_date": "2026-09-15",
       "sale_type": "Tramite Commissionario",
-      "sale_date": "2026-10-30T12:00",
-      "offer_deadline": "2026-10-29T12:00",
-      "base_auction_price": "15.200,00 €",
-      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4632637",
-      "detail_verified": true
-    },
-    {
-      "title": "CESSIONE CREDITI SUPERBONUS (110% LART. 119 DL 34/20) ANNUALITA' 2026-2027-2028-2029",
-      "credit_description": "CESSIONE CREDITI SUPERBONUS (110% LART. 119 DL 34/20) ANNUALITA' 2026-2027-2028-2029",
-      "court_or_procedure": "Tribunale di BRESCIA - 136/2026",
-      "publication_date": "2026-09-18",
-      "sale_type": "Competitiva",
-      "sale_date": "2026-10-19T15:00",
-      "offer_deadline": "2026-10-19T12:00",
-      "base_auction_price": "1.732.259,00 €",
-      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4632603",
+      "sale_date": "2026-10-07T12:00",
+      "offer_deadline": "2026-10-06T12:00",
+      "base_auction_price": "2.560,00 €",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4630714",
       "detail_verified": true
     }
   ]

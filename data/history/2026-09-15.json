@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-04T07:24:42.327Z",
+  "checked_at": "2026-10-04T07:33:48.316Z",
   "target_date": "2026-09-15",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
   "status": "success",
@@ -12,13 +12,36 @@
     "listings_seen": 96,
     "candidates_found": 1,
     "candidates_checked": 1,
-    "stop_reason": "page_only_older_dates"
+    "stop_reason": "page_only_older_dates",
+    "pages": [
+      {
+        "page": 1,
+        "listings": 48,
+        "newest": "2026-10-03",
+        "oldest": "2026-09-10",
+        "undated": 0,
+        "ordered": true
+      },
+      {
+        "page": 2,
+        "listings": 48,
+        "newest": "2026-09-10",
+        "oldest": "2026-08-25",
+        "undated": 0,
+        "ordered": true
+      }
+    ],
+    "first_page_reloads": 1,
+    "site_newest_date": "2026-10-03"
   },
   "announcement_errors": [],
   "announcements": [
     {
       "title": "Lotto costituito da 18 Titoli PAC, meglio descritti nell'avviso e nella perizia.",
       "credit_description": "Lotto costituito da 18 Titoli PAC, meglio descritti nell'avviso e nella perizia.",
+      "asset_descriptions": [
+        "Lotto costituito da 18 Titoli PAC, meglio descritti nell'avviso e nella perizia."
+      ],
       "court_or_procedure": "Tribunale di ALESSANDRIA - 2353/2025",
       "publication_date": "2026-09-15",
       "sale_type": "Tramite Commissionario",
