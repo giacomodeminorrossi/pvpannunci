@@ -67,14 +67,15 @@ npm test
 - `error`: riepilogo del problema, oppure `null`;
 - `errors`: errori bloccanti (codice e messaggio);
 - `warnings`: avvisi non bloccanti, per esempio pagine o dettagli non verificati;
-- `coverage`: pagine controllate, annunci visti, candidati trovati e verificati, motivo di arresto e se la copertura è `complete`;
+- `coverage`: pagine controllate, annunci visti, candidati trovati e verificati, motivo di arresto e se la copertura è `complete`. Contiene anche `pages` (per ogni pagina: numero di annunci, data più recente e più vecchia, annunci senza data, ordine decrescente rispettato), `site_newest_date` (annuncio più recente in prima pagina) e, se la prima pagina è stata ricaricata perché sospetta, `first_page_reloads`;
 - `announcement_errors`: dettagli che non è stato possibile verificare, con il riferimento alla diagnostica salvata come artifact dell'esecuzione;
 - `announcements`: annunci pubblicati nella data richiesta.
 
 Per ogni annuncio vengono salvati, quando disponibili:
 
 - `title`: inizio della descrizione (il PVP non espone un titolo vero e proprio);
-- `credit_description`;
+- `credit_description`: campo "Descrizione" del lotto (il PVP può troncarlo);
+- `asset_descriptions`: descrizioni della sezione "Beni inclusi nel lotto", spesso più complete;
 - `court_or_procedure`;
 - `publication_date`;
 - `sale_type`: tipo di vendita, per esempio `Competitiva`;
@@ -85,6 +86,16 @@ Per ogni annuncio vengono salvati, quando disponibili:
 - `detail_verified`: `false` se l'annuncio è stato conservato con i soli dati della lista risultati.
 
 Un risultato `success` con `announcements: []` indica che il controllo è stato completato ma non sono stati trovati annunci pubblicati nella data richiesta.
+
+### Controlli di coerenza
+
+La ricerca si ferma alla prima pagina che contiene solo annunci più vecchi della data cercata, quindi dipende dall'ordine dei risultati. Per questo lo scraper:
+
+- ricarica fino a due volte la prima pagina se contiene solo annunci più vecchi della data cercata, oppure se il suo annuncio più recente è più vecchio di quello visto nel controllo precedente (in un controllo di prova il PVP ha restituito una volta come pagina 1 il contenuto di una pagina successiva);
+- segnala `first_page_older_than_previous_run` se l'anomalia persiste dopo i ricaricamenti;
+- segnala `result_order_unexpected` se le date non sono in ordine decrescente, dentro una pagina o tra pagine consecutive.
+
+In entrambi i casi lo stato è `partial`: un elenco vuoto non va letto come assenza di annunci.
 
 ## Risoluzione dei problemi
 
