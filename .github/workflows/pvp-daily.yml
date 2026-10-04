@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: pvp-daily
@@ -26,6 +27,9 @@ jobs:
       TZ: Europe/Paris
 
     steps:
+      - name: Scarica il repository
+        uses: actions/checkout@v4
+
       - name: Verifica orario locale e data target
         id: schedule_guard
         shell: bash
@@ -49,13 +53,18 @@ jobs:
           else
             target_date="${MANUAL_TARGET_DATE:-$(TZ=Europe/Paris date +%F)}"
           fi
+          # Con l'ora legale entrambi i cron cadono nella finestra e controllano la
+          # stessa data: il secondo viene saltato se il primo è già riuscito.
+          history_file="data/history/$target_date.json"
+          if [[ "$EVENT_NAME" == "schedule" && -f "$history_file" ]] \
+            && [[ "$(jq -r '.status' "$history_file")" == "success" ]]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Data $target_date già controllata con successo: esecuzione saltata."
+            exit 0
+          fi
           echo "should_run=true" >> "$GITHUB_OUTPUT"
           echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
           echo "Data target: $target_date"
-
-      - name: Scarica il repository
-        if: steps.schedule_guard.outputs.should_run == 'true'
-        uses: actions/checkout@v4
 
       - name: Configura Node.js
         if: steps.schedule_guard.outputs.should_run == 'true'
@@ -65,7 +74,7 @@ jobs:
 
       - name: Installa le dipendenze
         if: steps.schedule_guard.outputs.should_run == 'true'
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Installa Chromium
         if: steps.schedule_guard.outputs.should_run == 'true'
@@ -88,25 +97,43 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Prepara la notifica dei nuovi annunci
+        if: always() && steps.schedule_guard.outputs.should_run == 'true'
+        id: notify
+        run: node scripts/notify-new.mjs prepare "$RUNNER_TEMP/notify.md"
+
+      - name: Apri una issue per i nuovi annunci
+        if: always() && steps.notify.outputs.new_count > 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: ${{ steps.notify.outputs.title }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/notify.md"
+          node scripts/notify-new.mjs mark
+
       - name: Salva il risultato
         if: always() && steps.schedule_guard.outputs.should_run == 'true'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          cp data/latest.json "$RUNNER_TEMP/latest.json"
-          git restore data/latest.json
-          git fetch origin main
-          git merge --ff-only origin/main
-          cp "$RUNNER_TEMP/latest.json" data/latest.json
-          git add data/latest.json
+          git add data/
 
           if git diff --cached --quiet; then
-            echo "Nessuna modifica a data/latest.json."
-          else
-            git commit -m "Update daily PVP results"
-            git push
+            echo "Nessuna modifica ai dati."
+            exit 0
           fi
+
+          git commit -m "Update daily PVP results"
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push non riuscito (tentativo $attempt), nuovo tentativo..."
+            sleep $((attempt * 5))
+          done
+          echo "Impossibile pubblicare i risultati dopo 4 tentativi."
+          exit 1
 
       - name: Segnala un controllo non completato
         if: steps.schedule_guard.outputs.should_run == 'true' && steps.scrape.outcome == 'failure'
