@@ -37,6 +37,17 @@ export function toIsoDate(value) {
   return isoFromParts(year, month, day);
 }
 
+// Come toIsoDate, ma conserva l'ora se presente: "05/11/2026 13:00" → "2026-11-05T13:00".
+export function toIsoDateTime(value) {
+  const date = toIsoDate(value);
+  if (!date) return null;
+  const time = String(value).match(
+    /\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}\D{1,10}?(\d{1,2})[:.](\d{2})\b/,
+  );
+  if (!time || Number(time[1]) > 23 || Number(time[2]) > 59) return date;
+  return `${date}T${time[1].padStart(2, "0")}:${time[2]}`;
+}
+
 export function isValidIsoDate(value) {
   const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return Boolean(match && isoFromParts(match[1], match[2], match[3]) === value);
@@ -122,13 +133,14 @@ const FIELD_BOUNDARY_LABELS = [
   "r\\.?g\\.?",
   "data\\s+(?:di\\s+)?pubblicazione",
   "pubblicato\\s+(?:sul\\s+portale\\s+)?il",
-  "data\\s+(?:della\\s+)?vendita",
+  "data\\s+(?:di\\s+|della\\s+)?vendita",
   "vendita$",
   "termine\\s+presentazione\\s+offerte",
   "scadenza\\s+offerte",
   "data\\s+asta",
   "prezzo\\s+base(?:\\s+d['’]asta)?",
   "offerta\\s+minima",
+  "rialzo\\s+minimo",
   "modalit[aà]\\s+(?:di\\s+)?vendita",
   "luogo\\s+(?:di\\s+)?vendita",
   "ubicazione",
@@ -144,19 +156,22 @@ const FIELD_BOUNDARY_LABELS = [
   "numero\\s+lotto",
   "codice\\s+lotto",
   "dati\\s+(?:del|della)\\s+(?:bene|lotto|procedura|vendita)",
+  "beni\\s+inclusi(?:\\s+nel\\s+lotto)?",
+  "tipo\\s+procedura",
+  "lotto\\s+nr\\.?",
+  "referenti",
   "documenti",
   "allegati",
 ];
 
-const SALE_DATE_LABELS = [
-  "data\\s+vendita",
-  "data\\s+della\\s+vendita",
-  "termine\\s+presentazione\\s+offerte",
-  "scadenza\\s+offerte",
-  "data\\s+asta",
+// Sulla pagina PVP: "Data di vendita 06/11/2026 12:00", "Data asta 06/11/2026"
+// e, separato, "Termine presentazione offerte 05/11/2026 13:00".
+const SALE_DATE_LABELS = ["data\\s+(?:di\\s+|della\\s+)?vendita", "data\\s+asta"];
+const OFFER_DEADLINE_LABELS = [
+  "termine\\s+(?:di\\s+)?presentazione\\s+(?:delle\\s+)?offerte",
+  "scadenza\\s+(?:presentazione\\s+)?(?:delle\\s+)?offerte",
 ];
-
-const TITLE_LABELS = ["descrizione\\s+lotto", "descrizione", "tipologia"];
+const TITLE_MAX_LENGTH = 100;
 
 export function normalizeCreditDescription(value) {
   return clean(value)
@@ -198,12 +213,28 @@ export function publicationDateFrom(text) {
   return toIsoDate(inline?.[1]);
 }
 
-export function saleOrDeadlineDateFrom(text) {
-  return toIsoDate(readLabel(text, SALE_DATE_LABELS));
+export function saleDateFrom(text) {
+  return toIsoDateTime(readLabel(text, SALE_DATE_LABELS));
 }
 
-export function titleFrom(text) {
-  return readLabel(text, TITLE_LABELS);
+export function offerDeadlineFrom(text) {
+  return toIsoDateTime(readLabel(text, OFFER_DEADLINE_LABELS));
+}
+
+// La prima "Tipologia" della pagina è il tipo di vendita (es. "Competitiva");
+// le successive riguardano il bene e i referenti.
+export function saleTypeFrom(text) {
+  return readLabel(text, ["tipologia"]);
+}
+
+// Il PVP non espone un titolo: si usa l'inizio della descrizione.
+export function shortTitle(description, maxLength = TITLE_MAX_LENGTH) {
+  const value = clean(description);
+  if (!value) return null;
+  if (value.length <= maxLength) return value;
+  const cut = value.slice(0, maxLength - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > maxLength / 2 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:]+$/, "")}…`;
 }
 
 export function procedureReferenceFrom(text) {
@@ -335,7 +366,6 @@ export function extractJsonDetails(payloads) {
   ]).join(" - ");
 
   return {
-    title: firstJsonValue(entries, ["descrizioneLotto", "descrizione", "titolo", "tipologia"]),
     credit_description:
       normalizeCreditDescription(
         firstJsonValue(entries, [
@@ -355,14 +385,11 @@ export function extractJsonDetails(payloads) {
         "pubblicatoIl",
       ]),
     ),
-    sale_or_deadline_date: toIsoDate(
-      firstJsonValue(entries, [
-        "dataVendita",
-        "dataDellaVendita",
-        "terminePresentazioneOfferte",
-        "scadenzaOfferte",
-        "dataAsta",
-      ]),
+    sale_date: toIsoDateTime(
+      firstJsonValue(entries, ["dataVendita", "dataDellaVendita", "dataAsta"]),
+    ),
+    offer_deadline: toIsoDateTime(
+      firstJsonValue(entries, ["terminePresentazioneOfferte", "scadenzaOfferte"]),
     ),
     base_auction_price: firstJsonValue(entries, [
       "prezzoBaseAsta",
