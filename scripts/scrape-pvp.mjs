@@ -37,9 +37,12 @@ const SAVE_RESERVE_MS = 15_000;
 const NAVIGATION_TIMEOUT_MS = 60_000;
 const DETAIL_CONTENT_TIMEOUT_MS = 15_000;
 const DETAIL_STABILITY_MS = 1_000;
-// Ricaricamenti della prima pagina quando il suo contenuto è sospetto.
-const FIRST_PAGE_RELOADS = 2;
-const FIRST_PAGE_RELOAD_DELAY_MS = 3_000;
+// Ricaricamenti di una pagina risultati quando il suo contenuto è sospetto.
+const PAGE_RELOADS = 2;
+const PAGE_RELOAD_DELAY_MS = 3_000;
+// Le pagine sono contigue: la successiva riparte dalla data in cui finisce la
+// precedente. Un salto più ampio fa sospettare un elenco diverso.
+const MAX_PAGE_GAP_DAYS = 7;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = resolve(__dirname, "../data/latest.json");
 const HISTORY_PATH = resolve(__dirname, "../data/history");
@@ -331,12 +334,24 @@ async function loadResultPage(page, pageNumber) {
   return { bodyText, links, summary: summarizePageDates(links.map((item) => item.listingPublicationDate)) };
 }
 
-// La prima pagina è sospetta se non contiene nulla di nuovo rispetto alla data
-// cercata o all'annuncio più recente visto dal controllo precedente: in un
-// controllo di prova il PVP ha restituito una volta, come pagina 1, il
-// contenuto di una pagina successiva.
-function firstPageSuspicion(summary, previousSiteNewest) {
+function daysBetween(older, newer) {
+  return (Date.parse(`${newer}T00:00:00Z`) - Date.parse(`${older}T00:00:00Z`)) / 86_400_000;
+}
+
+// Nei controlli di prova il PVP ha restituito talvolta, come pagina 1, un elenco
+// diverso (una pagina successiva, o annunci del 2024): il controllo si sarebbe
+// fermato subito dichiarando "nessun annuncio". Una pagina è sospetta se:
+// - è la prima e non contiene nulla di nuovo rispetto alla data cercata o
+//   all'annuncio più recente visto dal controllo precedente;
+// - è una pagina successiva e salta troppo indietro rispetto alla precedente.
+function pageSuspicion(pageNumber, summary, previousSiteNewest, previousPageOldest) {
   if (!summary.newest) return null;
+  if (pageNumber > 0) {
+    if (previousPageOldest && daysBetween(summary.newest, previousPageOldest) > MAX_PAGE_GAP_DAYS) {
+      return `inizia dal ${summary.newest}, ma la pagina precedente finiva il ${previousPageOldest}`;
+    }
+    return null;
+  }
   if (previousSiteNewest && summary.newest < previousSiteNewest) {
     return `l'annuncio più recente (${summary.newest}) è più vecchio di quello visto nel controllo precedente (${previousSiteNewest})`;
   }
@@ -361,15 +376,27 @@ async function collectCandidateLinks(page, coverage, warnings, previousSiteNewes
     try {
       ({ bodyText, links, summary } = await loadResultPage(page, pageNumber));
 
+      let suspicion = pageSuspicion(pageNumber, summary, previousSiteNewest, previousPageOldest);
+      for (let reload = 1; suspicion && reload <= PAGE_RELOADS; reload += 1) {
+        console.warn(
+          `Pagina ${pageNumber + 1} sospetta (${suspicion}): ricaricamento ${reload}/${PAGE_RELOADS}.`,
+        );
+        coverage.page_reloads = (coverage.page_reloads || 0) + 1;
+        await page.waitForTimeout(PAGE_RELOAD_DELAY_MS);
+        ({ bodyText, links, summary } = await loadResultPage(page, pageNumber));
+        suspicion = pageSuspicion(pageNumber, summary, previousSiteNewest, previousPageOldest);
+      }
+
+      if (pageNumber > 0 && suspicion) {
+        coverage.complete = false;
+        warnings.push({
+          code: "result_page_gap",
+          message: `Pagina ${pageNumber + 1} anomala anche dopo ${PAGE_RELOADS} ricaricamenti: ${suspicion}.`,
+          page: pageNumber + 1,
+        });
+      }
+
       if (pageNumber === 0) {
-        let suspicion = firstPageSuspicion(summary, previousSiteNewest);
-        for (let reload = 1; suspicion && reload <= FIRST_PAGE_RELOADS; reload += 1) {
-          console.warn(`Pagina 1 sospetta (${suspicion}): ricaricamento ${reload}/${FIRST_PAGE_RELOADS}.`);
-          coverage.first_page_reloads = reload;
-          await page.waitForTimeout(FIRST_PAGE_RELOAD_DELAY_MS);
-          ({ bodyText, links, summary } = await loadResultPage(page, pageNumber));
-          suspicion = firstPageSuspicion(summary, previousSiteNewest);
-        }
         coverage.site_newest_date = summary.newest;
         // Senza annunci nuovi la prima pagina è legittimamente più vecchia della
         // data cercata; resta anomalo solo il confronto con il controllo precedente.
@@ -377,7 +404,7 @@ async function collectCandidateLinks(page, coverage, warnings, previousSiteNewes
           coverage.complete = false;
           warnings.push({
             code: "first_page_older_than_previous_run",
-            message: `Pagina 1 anomala anche dopo ${FIRST_PAGE_RELOADS} ricaricamenti: ${suspicion}.`,
+            message: `Pagina 1 anomala anche dopo ${PAGE_RELOADS} ricaricamenti: ${suspicion}.`,
             page: 1,
           });
         }

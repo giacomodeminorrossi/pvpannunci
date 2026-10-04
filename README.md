@@ -67,7 +67,7 @@ npm test
 - `error`: riepilogo del problema, oppure `null`;
 - `errors`: errori bloccanti (codice e messaggio);
 - `warnings`: avvisi non bloccanti, per esempio pagine o dettagli non verificati;
-- `coverage`: pagine controllate, annunci visti, candidati trovati e verificati, motivo di arresto e se la copertura è `complete`. Contiene anche `pages` (per ogni pagina: numero di annunci, data più recente e più vecchia, annunci senza data, ordine decrescente rispettato), `site_newest_date` (annuncio più recente in prima pagina) e, se la prima pagina è stata ricaricata perché sospetta, `first_page_reloads`;
+- `coverage`: pagine controllate, annunci visti, candidati trovati e verificati, motivo di arresto e se la copertura è `complete`. Contiene anche `pages` (per ogni pagina: numero di annunci, data più recente e più vecchia, annunci senza data, ordine decrescente rispettato), `site_newest_date` (annuncio più recente in prima pagina) e, se qualche pagina è stata ricaricata perché sospetta, `page_reloads`;
 - `announcement_errors`: dettagli che non è stato possibile verificare, con il riferimento alla diagnostica salvata come artifact dell'esecuzione;
 - `announcements`: annunci pubblicati nella data richiesta.
 
@@ -91,8 +91,9 @@ Un risultato `success` con `announcements: []` indica che il controllo è stato 
 
 La ricerca si ferma alla prima pagina che contiene solo annunci più vecchi della data cercata, quindi dipende dall'ordine dei risultati. Per questo lo scraper:
 
-- ricarica fino a due volte la prima pagina se contiene solo annunci più vecchi della data cercata, oppure se il suo annuncio più recente è più vecchio di quello visto nel controllo precedente (in un controllo di prova il PVP ha restituito una volta come pagina 1 il contenuto di una pagina successiva);
-- segnala `first_page_older_than_previous_run` se l'anomalia persiste dopo i ricaricamenti;
+- ricarica fino a due volte la prima pagina se contiene solo annunci più vecchi della data cercata, oppure se il suo annuncio più recente è più vecchio di quello visto nel controllo precedente (nei controlli di prova il PVP ha restituito come pagina 1 un elenco diverso, anche con annunci del 2024);
+- ricarica fino a due volte una pagina successiva se salta indietro di oltre 7 giorni rispetto a dove finiva la precedente (le pagine sono contigue), e segnala `result_page_gap` se il salto persiste;
+- segnala `first_page_older_than_previous_run` se l'anomalia della prima pagina persiste dopo i ricaricamenti;
 - segnala `result_order_unexpected` se le date non sono in ordine decrescente, dentro una pagina o tra pagine consecutive.
 
 In entrambi i casi lo stato è `partial`: un elenco vuoto non va letto come assenza di annunci.
