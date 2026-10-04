@@ -18,9 +18,11 @@ import {
   looksBlocked,
   looksLikeNoResults,
   publicationDateFrom,
-  saleOrDeadlineDateFrom,
+  offerDeadlineFrom,
+  saleDateFrom,
+  saleTypeFrom,
   sanitizeOfficialUrl,
-  titleFrom,
+  shortTitle,
 } from "./lib/parse.mjs";
 
 const SOURCE_URL =
@@ -285,10 +287,11 @@ async function collectAnnouncementCards(page) {
     const normalizedUrl = new URL(item.url);
     normalizedUrl.hash = "";
     const url = normalizedUrl.toString();
-    const listingText = clean(item.listingText);
+    // Le righe restano separate: readLabel lavora riga per riga.
+    const listingText = String(item.listingText || "").replace(/\r\n?/g, "\n").trim();
     const current = byUrl.get(url);
 
-    if (!current || listingText.length > current.listingText.length) {
+    if (!current || clean(listingText).length > clean(current.listingText).length) {
       byUrl.set(url, {
         url,
         listingText,
@@ -427,14 +430,16 @@ async function firstUsefulHeading(page) {
 
 function extractListingAnnouncement(item) {
   const listingText = item.listingText;
-  const title = item.listingTitle || titleFrom(listingText);
+  const creditDescription = creditDescriptionFrom(listingText);
 
   return {
-    title: title ? clean(title) : null,
-    credit_description: creditDescriptionFrom(listingText),
+    title: shortTitle(creditDescription),
+    credit_description: creditDescription,
     court_or_procedure: courtOrProcedureFrom(listingText),
     publication_date: item.listingPublicationDate,
-    sale_or_deadline_date: saleOrDeadlineDateFrom(listingText),
+    sale_type: saleTypeFrom(listingText),
+    sale_date: saleDateFrom(listingText),
+    offer_deadline: offerDeadlineFrom(listingText),
     base_auction_price: baseAuctionPriceFrom(listingText),
     official_url: item.url,
     detail_verified: false,
@@ -640,23 +645,22 @@ async function extractAnnouncement(context, listPage, item) {
     });
 
     const courtOrProcedure = courtOrProcedureFrom(bodyText);
-    const saleOrDeadlineDate = saleOrDeadlineDateFrom(bodyText);
-    const creditDescription = creditDescriptionFrom(bodyText);
+    const creditDescription =
+      creditDescriptionFrom(bodyText) || jsonDetails.credit_description || null;
     const baseAuctionPrice = baseAuctionPriceFrom(bodyText);
     const title =
-      titleFrom(bodyText) ||
-      jsonDetails.title ||
+      shortTitle(creditDescription) ||
       (await firstUsefulHeading(detailPage)) ||
-      item.listingTitle ||
-      item.listingText ||
       "Annuncio PVP";
 
     return {
       title: clean(title),
-      credit_description: creditDescription || jsonDetails.credit_description || null,
+      credit_description: creditDescription,
       court_or_procedure: courtOrProcedure || jsonDetails.court_or_procedure || null,
       publication_date: publicationDate,
-      sale_or_deadline_date: saleOrDeadlineDate || jsonDetails.sale_or_deadline_date || null,
+      sale_type: saleTypeFrom(bodyText),
+      sale_date: saleDateFrom(bodyText) || jsonDetails.sale_date || null,
+      offer_deadline: offerDeadlineFrom(bodyText) || jsonDetails.offer_deadline || null,
       base_auction_price: baseAuctionPrice || jsonDetails.base_auction_price || null,
       official_url: item.url,
       detail_verified: true,

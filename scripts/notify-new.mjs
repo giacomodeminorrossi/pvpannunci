@@ -35,7 +35,9 @@ function bodyFor(latest, announcements) {
     const rows = [
       ["Procedura", announcement.court_or_procedure],
       ["Pubblicato il", announcement.publication_date],
-      ["Vendita / scadenza", announcement.sale_or_deadline_date],
+      ["Tipo di vendita", announcement.sale_type],
+      ["Data vendita", announcement.sale_date?.replace("T", " ")],
+      ["Termine offerte", announcement.offer_deadline?.replace("T", " ")],
       ["Prezzo base", announcement.base_auction_price],
       ["Dettaglio verificato", announcement.detail_verified ? "sì" : "no"],
     ]

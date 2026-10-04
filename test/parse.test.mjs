@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   courtOrProcedureFrom,
@@ -9,10 +10,18 @@ import {
   normalizeCreditDescription,
   publicationDateFrom,
   readLabel,
-  saleOrDeadlineDateFrom,
+  baseAuctionPriceFrom,
+  offerDeadlineFrom,
+  saleDateFrom,
+  saleTypeFrom,
   sanitizeOfficialUrl,
+  shortTitle,
   toIsoDate,
+  toIsoDateTime,
 } from "../scripts/lib/parse.mjs";
+
+// Testo reale della pagina di dettaglio PVP (annuncio 4639634), senza i referenti.
+const DETAIL_TEXT = readFileSync(new URL("./fixtures/detail-4639634.txt", import.meta.url), "utf8");
 
 test("toIsoDate converte date italiane e rifiuta date inesistenti", () => {
   assert.equal(toIsoDate("Pubblicato il 3/10/2026"), "2026-10-03");
@@ -61,10 +70,34 @@ test("creditDescriptionFrom unisce le righe fino all'etichetta successiva", () =
   );
 });
 
-test("publicationDateFrom e saleOrDeadlineDateFrom leggono le date etichettate", () => {
-  const text = "Data di pubblicazione: 03/10/2026\nData vendita\n06/11/2026";
-  assert.equal(publicationDateFrom(text), "2026-10-03");
-  assert.equal(saleOrDeadlineDateFrom(text), "2026-11-06");
+test("toIsoDateTime conserva l'ora quando presente", () => {
+  assert.equal(toIsoDateTime("05/11/2026 13:00"), "2026-11-05T13:00");
+  assert.equal(toIsoDateTime("06/11/2026"), "2026-11-06");
+  assert.equal(toIsoDateTime("06/11/2026 ore 9.30"), "2026-11-06T09:30");
+});
+
+test("shortTitle accorcia la descrizione a fine parola", () => {
+  assert.equal(shortTitle("Credito IVA"), "Credito IVA");
+  const title = shortTitle("parola ".repeat(40));
+  assert.ok(title.length <= 100);
+  assert.ok(title.endsWith("parola…"));
+  assert.equal(shortTitle(""), null);
+});
+
+test("pagina di dettaglio reale: tutti i campi", () => {
+  assert.equal(publicationDateFrom(DETAIL_TEXT), "2026-10-03");
+  assert.equal(saleDateFrom(DETAIL_TEXT), "2026-11-06T12:00");
+  assert.equal(offerDeadlineFrom(DETAIL_TEXT), "2026-11-05T13:00");
+  assert.equal(saleTypeFrom(DETAIL_TEXT), "Competitiva");
+  assert.equal(baseAuctionPriceFrom(DETAIL_TEXT), "9.736,00 €");
+  assert.equal(courtOrProcedureFrom(DETAIL_TEXT), "Tribunale di ROMA - 150/2017");
+  const description = creditDescriptionFrom(DETAIL_TEXT);
+  assert.ok(description.startsWith("Cessione pro soluto, in lotto unico, del credito IVA"));
+  assert.ok(description.endsWith("all'avviso di vendita allegato."));
+  assert.equal(
+    shortTitle(description),
+    "Cessione pro soluto, in lotto unico, del credito IVA del Fallimento Nugeco Immobiliare s.r.l. n.…",
+  );
 });
 
 test("courtOrProcedureFrom combina tribunale e numero procedura", () => {

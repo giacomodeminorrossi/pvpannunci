@@ -73,11 +73,13 @@ npm test
 
 Per ogni annuncio vengono salvati, quando disponibili:
 
-- `title`;
+- `title`: inizio della descrizione (il PVP non espone un titolo vero e proprio);
 - `credit_description`;
 - `court_or_procedure`;
 - `publication_date`;
-- `sale_or_deadline_date`;
+- `sale_type`: tipo di vendita, per esempio `Competitiva`;
+- `sale_date`: data della vendita, con l'ora quando indicata (`YYYY-MM-DD` oppure `YYYY-MM-DDTHH:MM`);
+- `offer_deadline`: termine per la presentazione delle offerte, nello stesso formato;
 - `base_auction_price`;
 - `official_url`;
 - `detail_verified`: `false` se l'annuncio è stato conservato con i soli dati della lista risultati.
