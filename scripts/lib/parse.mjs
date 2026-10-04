@@ -68,6 +68,11 @@ export function matchLabel(line, label) {
 
 // Le etichette sono in ordine di priorità: la prima etichetta presente nel
 // testo vince, anche se un'etichetta meno specifica compare prima.
+// Il PVP mostra "-" per i campi vuoti (es. "Tribunale" nelle liquidazioni volontarie).
+function isPlaceholder(value) {
+  return /^[-–—/.\s]*$/.test(value);
+}
+
 export function readLabel(text, labels) {
   const lines = linesOf(text);
 
@@ -76,11 +81,8 @@ export function readLabel(text, labels) {
       const match = matchLabel(lines[index], label);
       if (!match) continue;
 
-      const sameLine = clean(match[1]);
-      if (sameLine) return sameLine;
-
-      const nextLine = clean(lines[index + 1]);
-      if (nextLine) return nextLine;
+      const value = clean(match[1]) || clean(lines[index + 1]);
+      if (!isPlaceholder(value)) return value;
     }
   }
 
@@ -177,9 +179,12 @@ export function normalizeCreditDescription(value) {
   return clean(value)
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/([([{])\s+/g, "$1")
-    .replace(new RegExp(`([.!?])(?=[A-ZÀ-ÖØ-Þ])`, "g"), "$1 ")
+    // Solo davanti a una parola ("75.La" → "75. La"), non nelle sigle come "R.G.".
+    .replace(/([.!?])(?=[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ])/g, "$1 ")
     .replace(new RegExp(`([:;])(?=[${LETTER}])`, "g"), "$1 ")
     .replace(/([a-zà-öø-ÿ])(?=[A-ZÀ-ÖØ-Þ])/g, "$1 ")
+    // Importo attaccato al testo successivo: "111.059,00credito" → "111.059,00 credito".
+    .replace(new RegExp(`(\\d,\\d{2})(?=[${LETTER}])`, "g"), "$1 ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -358,8 +363,27 @@ export function jsonLooksPertinent(value, itemUrl, responseUrl) {
   return Boolean(hasIdentifier || (endpointMatches && hasRelevantKeys));
 }
 
-export function extractJsonDetails(payloads) {
-  const entries = payloads.flatMap((payload) => scalarEntries(payload));
+// Una risposta può contenere più annunci (es. una lista): si usa solo l'oggetto
+// che contiene l'identificativo dell'annuncio, se presente.
+function recordWithIdentifier(value, identifier, depth = 0) {
+  if (!identifier || depth > 8 || value === null || typeof value !== "object") return null;
+  if (
+    !Array.isArray(value) &&
+    Object.values(value).some((child) => child !== null && typeof child !== "object" && String(child) === identifier)
+  ) {
+    return value;
+  }
+  for (const child of Object.values(value)) {
+    const record = recordWithIdentifier(child, identifier, depth + 1);
+    if (record) return record;
+  }
+  return null;
+}
+
+export function extractJsonDetails(payloads, identifier = null) {
+  const entries = payloads.flatMap((payload) =>
+    scalarEntries(recordWithIdentifier(payload, identifier) || payload),
+  );
   const courtOrProcedure = unique([
     firstJsonValue(entries, ["tribunale", "ufficioGiudiziario"]),
     firstJsonValue(entries, ["numeroProcedura", "procedura", "registroGenerale", "rg"]),

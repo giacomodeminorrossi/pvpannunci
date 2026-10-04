@@ -632,7 +632,7 @@ async function extractAnnouncement(context, listPage, item) {
       bodyText = await detailPage.locator("body").innerText().catch(() => "");
     }
     await capture.stop();
-    const jsonDetails = extractJsonDetails(capture.payloads);
+    const jsonDetails = extractJsonDetails(capture.payloads, announcementIdFrom(item.url));
     const detailPublicationDate = publicationDateFrom(bodyText) || jsonDetails.publication_date;
     const publicationDate = detailPublicationDate || item.listingPublicationDate;
 
