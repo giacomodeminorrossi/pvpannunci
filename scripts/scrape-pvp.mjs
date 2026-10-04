@@ -1,9 +1,10 @@
 import { chromium } from "playwright";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   BLOCKED_PATTERN,
+  assetDescriptionsFrom,
   PUBLICATION_LABEL_PATTERN,
   announcementIdFrom,
   baseAuctionPriceFrom,
@@ -23,6 +24,7 @@ import {
   saleTypeFrom,
   sanitizeOfficialUrl,
   shortTitle,
+  summarizePageDates,
 } from "./lib/parse.mjs";
 
 const SOURCE_URL =
@@ -35,6 +37,9 @@ const SAVE_RESERVE_MS = 15_000;
 const NAVIGATION_TIMEOUT_MS = 60_000;
 const DETAIL_CONTENT_TIMEOUT_MS = 15_000;
 const DETAIL_STABILITY_MS = 1_000;
+// Ricaricamenti della prima pagina quando il suo contenuto è sospetto.
+const FIRST_PAGE_RELOADS = 2;
+const FIRST_PAGE_RELOAD_DELAY_MS = 3_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = resolve(__dirname, "../data/latest.json");
 const HISTORY_PATH = resolve(__dirname, "../data/history");
@@ -305,37 +310,78 @@ async function collectAnnouncementCards(page) {
   return [...byUrl.values()];
 }
 
-async function collectCandidateLinks(page, coverage, warnings) {
+async function loadResultPage(page, pageNumber) {
+  const url = new URL(SOURCE_URL);
+  url.searchParams.set("page", String(pageNumber));
+  url.searchParams.set("size", String(PAGE_SIZE));
+  const response = await page.goto(url.toString(), {
+    waitUntil: "domcontentloaded",
+    timeout: operationTimeout(
+      NAVIGATION_TIMEOUT_MS,
+      `il caricamento della pagina risultati ${pageNumber + 1}`,
+    ),
+  });
+  const bodyText = await assertUsablePage(page, response, `la pagina risultati ${pageNumber + 1}`);
+  await page
+    .waitForLoadState("networkidle", {
+      timeout: operationTimeout(10_000, `l'attesa della pagina risultati ${pageNumber + 1}`),
+    })
+    .catch(() => {});
+  const links = await collectAnnouncementCards(page);
+  return { bodyText, links, summary: summarizePageDates(links.map((item) => item.listingPublicationDate)) };
+}
+
+// La prima pagina è sospetta se non contiene nulla di nuovo rispetto alla data
+// cercata o all'annuncio più recente visto dal controllo precedente: in un
+// controllo di prova il PVP ha restituito una volta, come pagina 1, il
+// contenuto di una pagina successiva.
+function firstPageSuspicion(summary, previousSiteNewest) {
+  if (!summary.newest) return null;
+  if (previousSiteNewest && summary.newest < previousSiteNewest) {
+    return `l'annuncio più recente (${summary.newest}) è più vecchio di quello visto nel controllo precedente (${previousSiteNewest})`;
+  }
+  if (summary.newest < targetDate) {
+    return `contiene solo annunci più vecchi della data cercata (il più recente è del ${summary.newest})`;
+  }
+  return null;
+}
+
+async function collectCandidateLinks(page, coverage, warnings, previousSiteNewest) {
   const seen = new Map();
   const candidates = new Map();
+  let previousPageOldest = null;
+  coverage.pages = [];
 
   for (let pageNumber = 0; pageNumber < MAX_PAGES; pageNumber += 1) {
     ensureBudget(`la paginazione, prima della pagina ${pageNumber + 1}`);
-    const url = new URL(SOURCE_URL);
-    url.searchParams.set("page", String(pageNumber));
-    url.searchParams.set("size", String(PAGE_SIZE));
 
     let bodyText;
     let links;
+    let summary;
     try {
-      const response = await page.goto(url.toString(), {
-        waitUntil: "domcontentloaded",
-        timeout: operationTimeout(
-          NAVIGATION_TIMEOUT_MS,
-          `il caricamento della pagina risultati ${pageNumber + 1}`,
-        ),
-      });
-      bodyText = await assertUsablePage(
-        page,
-        response,
-        `la pagina risultati ${pageNumber + 1}`,
-      );
-      await page
-        .waitForLoadState("networkidle", {
-          timeout: operationTimeout(10_000, `l'attesa della pagina risultati ${pageNumber + 1}`),
-        })
-        .catch(() => {});
-      links = await collectAnnouncementCards(page);
+      ({ bodyText, links, summary } = await loadResultPage(page, pageNumber));
+
+      if (pageNumber === 0) {
+        let suspicion = firstPageSuspicion(summary, previousSiteNewest);
+        for (let reload = 1; suspicion && reload <= FIRST_PAGE_RELOADS; reload += 1) {
+          console.warn(`Pagina 1 sospetta (${suspicion}): ricaricamento ${reload}/${FIRST_PAGE_RELOADS}.`);
+          coverage.first_page_reloads = reload;
+          await page.waitForTimeout(FIRST_PAGE_RELOAD_DELAY_MS);
+          ({ bodyText, links, summary } = await loadResultPage(page, pageNumber));
+          suspicion = firstPageSuspicion(summary, previousSiteNewest);
+        }
+        coverage.site_newest_date = summary.newest;
+        // Senza annunci nuovi la prima pagina è legittimamente più vecchia della
+        // data cercata; resta anomalo solo il confronto con il controllo precedente.
+        if (previousSiteNewest && summary.newest && summary.newest < previousSiteNewest) {
+          coverage.complete = false;
+          warnings.push({
+            code: "first_page_older_than_previous_run",
+            message: `Pagina 1 anomala anche dopo ${FIRST_PAGE_RELOADS} ricaricamenti: ${suspicion}.`,
+            page: 1,
+          });
+        }
+      }
     } catch (error) {
       coverage.complete = false;
       if (error instanceof BudgetExceededError) {
@@ -349,6 +395,22 @@ async function collectCandidateLinks(page, coverage, warnings) {
 
     coverage.pages_checked += 1;
     coverage.listings_seen += links.length;
+    coverage.pages.push({ page: pageNumber + 1, ...summary });
+    console.log(
+      `Pagina ${pageNumber + 1}: ${summary.listings} annunci, dal ${summary.newest} al ${summary.oldest}` +
+        (summary.undated ? `, ${summary.undated} senza data` : ""),
+    );
+
+    // L'arresto anticipato presuppone l'ordine per data decrescente.
+    if (!summary.ordered || (previousPageOldest && summary.newest && summary.newest > previousPageOldest)) {
+      coverage.complete = false;
+      warnings.push({
+        code: "result_order_unexpected",
+        message: "Le date di pubblicazione non sono in ordine decrescente: la copertura non è garantita.",
+        page: pageNumber + 1,
+      });
+    }
+    previousPageOldest = summary.oldest || previousPageOldest;
 
     if (links.length === 0) {
       if (pageNumber === 0 && !looksLikeNoResults(bodyText)) {
@@ -435,6 +497,7 @@ function extractListingAnnouncement(item) {
   return {
     title: shortTitle(creditDescription),
     credit_description: creditDescription,
+    asset_descriptions: [],
     court_or_procedure: courtOrProcedureFrom(listingText),
     publication_date: item.listingPublicationDate,
     sale_type: saleTypeFrom(listingText),
@@ -656,6 +719,7 @@ async function extractAnnouncement(context, listPage, item) {
     return {
       title: clean(title),
       credit_description: creditDescription,
+      asset_descriptions: assetDescriptionsFrom(bodyText),
       court_or_procedure: courtOrProcedure || jsonDetails.court_or_procedure || null,
       publication_date: publicationDate,
       sale_type: saleTypeFrom(bodyText),
@@ -678,6 +742,17 @@ async function extractAnnouncement(context, listPage, item) {
   } finally {
     if (openedNewPage && !detailPage.isClosed()) await detailPage.close().catch(() => {});
     await restoreResultsPage(listPage, item).catch(() => {});
+  }
+}
+
+// Data dell'annuncio più recente visto in prima pagina dal controllo precedente.
+async function previousSiteNewestDate() {
+  try {
+    const previous = JSON.parse(await readFile(OUTPUT_PATH, "utf8"));
+    const value = previous?.coverage?.site_newest_date;
+    return isValidIsoDate(value) ? value : null;
+  } catch {
+    return null;
   }
 }
 
@@ -727,7 +802,12 @@ try {
   const page = await context.newPage();
   page.setDefaultTimeout(20_000);
 
-  const candidates = await collectCandidateLinks(page, coverage, warnings);
+  const candidates = await collectCandidateLinks(
+    page,
+    coverage,
+    warnings,
+    await previousSiteNewestDate(),
+  );
 
   for (let index = 0; index < candidates.length; index += 1) {
     const item = candidates[index];

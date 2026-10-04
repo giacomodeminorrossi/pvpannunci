@@ -47,6 +47,10 @@ function bodyFor(latest, announcements) {
       `### [${announcement.title || "Annuncio PVP"}](${announcement.official_url})`,
       ...rows,
       announcement.credit_description ? `\n> ${announcement.credit_description}` : "",
+      // Il PVP tronca la descrizione del lotto: si aggiungono i beni se dicono di più.
+      ...(announcement.asset_descriptions || [])
+        .filter((text) => text !== announcement.credit_description)
+        .map((text) => `\n**Bene:** ${text}`),
     ].join("\n");
   });
 

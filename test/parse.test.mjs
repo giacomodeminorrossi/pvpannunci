@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  assetDescriptionsFrom,
   courtOrProcedureFrom,
   creditDescriptionFrom,
   extractJsonDetails,
@@ -19,6 +20,7 @@ import {
   shortTitle,
   toIsoDate,
   toIsoDateTime,
+  summarizePageDates,
 } from "../scripts/lib/parse.mjs";
 
 // Testo reale della pagina di dettaglio PVP (annuncio 4639634), senza i referenti.
@@ -149,4 +151,43 @@ test("URL degli annunci: riconoscimento e pulizia", () => {
     sanitizeOfficialUrl(url),
     "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=1",
   );
+});
+
+test("summarizePageDates riassume e verifica l'ordine decrescente", () => {
+  assert.deepEqual(summarizePageDates(["2026-10-03", "2026-09-28", null, "2026-09-14"]), {
+    listings: 4,
+    newest: "2026-10-03",
+    oldest: "2026-09-14",
+    undated: 1,
+    ordered: true,
+  });
+  assert.equal(summarizePageDates(["2026-09-14", "2026-10-03"]).ordered, false);
+  assert.equal(summarizePageDates([]).newest, null);
+});
+
+test("assetDescriptionsFrom legge i beni inclusi nel lotto", () => {
+  assert.deepEqual(assetDescriptionsFrom(DETAIL_TEXT), [
+    "Cessione pro soluto, in lotto unico, del credito IVA del Fallimento Nugeco Immobiliare s.r.l. n. 150/2017 che risulterà dalla dichiarazione IVA 2027 e sarà richiesto a rimborso nei limiti consentiti dalla normativa applicabile. Valore nominale complessivo attualmente stimato in euro 20.163,23. Prezzo base d'asta pari ad euro 9.736,00. Per le condizioni e le modalità di cessione si rinvia all'avviso di vendita allegato.",
+  ]);
+  // Struttura reale (annuncio 4632637): categoria, indirizzo, descrizione, mappa.
+  const text = [
+    "Beni inclusi nel lotto",
+    "Titoli (Azioni, Bot, Cct Etc )",
+    "Via Svezia 9, 35127 Ponte San Nicolò Padova",
+    "N° 28.263 azioni della società SERVIZI LOGISTICI S.p.A.",
+    "Tipologia",
+    "Titoli (Azioni, Bot, Cct Etc )",
+    "Credito Unitario",
+    "Credito IVA e credito da azione risarcitoria civile",
+    "Tipologia",
+    "Credito Unitario",
+    'EMBED-MAP.DESC_ARIA { "lat": 45.4, "lng": 10.9 }',
+    "Procedura",
+    "Tipo Procedura",
+  ].join("\n");
+  assert.deepEqual(assetDescriptionsFrom(text), [
+    "N° 28.263 azioni della società SERVIZI LOGISTICI S.p.A.",
+    "Credito IVA e credito da azione risarcitoria civile",
+  ]);
+  assert.deepEqual(assetDescriptionsFrom("Descrizione\nNiente beni"), []);
 });

@@ -429,3 +429,36 @@ export function deduplicateAnnouncements(values) {
     ...new Map(values.map((announcement) => [announcement.official_url, announcement])).values(),
   ];
 }
+
+// Riepilogo delle date di pubblicazione di una pagina risultati, nell'ordine mostrato.
+export function summarizePageDates(dates) {
+  const known = dates.filter(Boolean);
+  return {
+    listings: dates.length,
+    newest: known.length ? known.reduce((a, b) => (a > b ? a : b)) : null,
+    oldest: known.length ? known.reduce((a, b) => (a < b ? a : b)) : null,
+    undated: dates.length - known.length,
+    // La ricerca è ordinata per data di pubblicazione decrescente.
+    ordered: known.every((date, index) => index === 0 || known[index - 1] >= date),
+  };
+}
+
+// Descrizioni della sezione "Beni inclusi nel lotto". Il PVP tronca il campo
+// "Descrizione" del lotto, mentre qui il testo è spesso più completo. Per ogni
+// bene la struttura è: categoria, indirizzo (facoltativo), descrizione,
+// "Tipologia", categoria; la descrizione è la riga prima di "Tipologia".
+export function assetDescriptionsFrom(text) {
+  const lines = linesOf(text);
+  const start = lines.findIndex((line) => matchLabel(line, "beni\\s+inclusi(?:\\s+nel\\s+lotto)?"));
+  if (start < 0) return [];
+  const end = lines.findIndex(
+    (line, index) => index > start && /^(?:procedura|tipo\s+procedura|referenti|allegati)$/i.test(line),
+  );
+  const section = lines.slice(start + 1, end < 0 ? undefined : end);
+  return unique(
+    section
+      .map((line, index) => (/^tipologia$/i.test(line) && index > 0 ? section[index - 1] : null))
+      .filter((line) => line && !/^tipologia$/i.test(line))
+      .map(normalizeCreditDescription),
+  );
+}
