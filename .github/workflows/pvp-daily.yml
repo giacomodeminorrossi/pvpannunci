@@ -74,7 +74,7 @@ jobs:
 
       - name: Installa le dipendenze
         if: steps.schedule_guard.outputs.should_run == 'true'
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Installa Chromium
         if: steps.schedule_guard.outputs.should_run == 'true'
