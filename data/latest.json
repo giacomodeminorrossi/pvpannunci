@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-04T07:23:18.270Z",
+  "checked_at": "2026-10-04T07:24:42.327Z",
   "target_date": "2026-09-15",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
   "status": "success",
@@ -8,12 +8,25 @@
   "errors": [],
   "coverage": {
     "complete": true,
-    "pages_checked": 1,
-    "listings_seen": 48,
-    "candidates_found": 0,
-    "candidates_checked": 0,
+    "pages_checked": 2,
+    "listings_seen": 96,
+    "candidates_found": 1,
+    "candidates_checked": 1,
     "stop_reason": "page_only_older_dates"
   },
   "announcement_errors": [],
-  "announcements": []
+  "announcements": [
+    {
+      "title": "Lotto costituito da 18 Titoli PAC, meglio descritti nell'avviso e nella perizia.",
+      "credit_description": "Lotto costituito da 18 Titoli PAC, meglio descritti nell'avviso e nella perizia.",
+      "court_or_procedure": "Tribunale di ALESSANDRIA - 2353/2025",
+      "publication_date": "2026-09-15",
+      "sale_type": "Tramite Commissionario",
+      "sale_date": "2026-10-07T12:00",
+      "offer_deadline": "2026-10-06T12:00",
+      "base_auction_price": "2.560,00 €",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4630714",
+      "detail_verified": true
+    }
+  ]
 }
