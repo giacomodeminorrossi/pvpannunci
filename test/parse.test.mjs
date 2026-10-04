@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   courtOrProcedureFrom,
   creditDescriptionFrom,
+  extractJsonDetails,
   isAnnouncementUrl,
   isValidIsoDate,
   matchLabel,
@@ -98,6 +99,41 @@ test("pagina di dettaglio reale: tutti i campi", () => {
     shortTitle(description),
     "Cessione pro soluto, in lotto unico, del credito IVA del Fallimento Nugeco Immobiliare s.r.l. n.…",
   );
+});
+
+test("normalizeCreditDescription separa importi e frasi attaccati dal sito", () => {
+  assert.equal(
+    normalizeCreditDescription(
+      "così composto:credito IVA già chiesto a rimborsoEuro 111.059,00credito IVA riportato",
+    ),
+    "così composto: credito IVA già chiesto a rimborso Euro 111.059,00 credito IVA riportato",
+  );
+  assert.equal(
+    normalizeCreditDescription("IMPORTO CREDITO: € 3.151,50I CREDITI VENGONO"),
+    "IMPORTO CREDITO: € 3.151,50 I CREDITI VENGONO",
+  );
+  assert.equal(
+    normalizeCreditDescription("CREDITO IVA € 150.451,75.La documentazione"),
+    "CREDITO IVA € 150.451,75. La documentazione",
+  );
+  assert.equal(normalizeCreditDescription("( R.G. n. 26/2018)"), "(R.G. n. 26/2018)");
+});
+
+test("i campi con '-' sono considerati vuoti", () => {
+  const text = "N° Procedura\n26\nAnno Procedura\n2018\nTribunale\n-\nLotto nr.\nLOTTO UNICO";
+  assert.equal(courtOrProcedureFrom(text), "26/2018");
+});
+
+test("extractJsonDetails usa solo il record dell'annuncio richiesto", () => {
+  const payload = {
+    content: [
+      { idAnnuncio: 4639634, tribunale: "Tribunale di ROMA", prezzoBase: "9736" },
+      { idAnnuncio: 4637201, tribunale: "Tribunale di MILANO", prezzoBase: "60000" },
+    ],
+  };
+  const details = extractJsonDetails([payload], "4637201");
+  assert.equal(details.court_or_procedure, "Tribunale di MILANO");
+  assert.equal(details.base_auction_price, "60000");
 });
 
 test("courtOrProcedureFrom combina tribunale e numero procedura", () => {
