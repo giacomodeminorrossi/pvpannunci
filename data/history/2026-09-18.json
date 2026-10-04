@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-04T07:28:33.018Z",
+  "checked_at": "2026-10-04T07:35:22.538Z",
   "target_date": "2026-09-18",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
   "status": "success",
@@ -12,13 +12,35 @@
     "listings_seen": 96,
     "candidates_found": 3,
     "candidates_checked": 3,
-    "stop_reason": "page_only_older_dates"
+    "stop_reason": "page_only_older_dates",
+    "pages": [
+      {
+        "page": 1,
+        "listings": 48,
+        "newest": "2026-10-03",
+        "oldest": "2026-09-10",
+        "undated": 0,
+        "ordered": true
+      },
+      {
+        "page": 2,
+        "listings": 48,
+        "newest": "2026-09-10",
+        "oldest": "2026-08-25",
+        "undated": 0,
+        "ordered": true
+      }
+    ],
+    "site_newest_date": "2026-10-03"
   },
   "announcement_errors": [],
   "announcements": [
     {
       "title": "LOTTO UNICO composto da: 1) CREDITO IRES, derivante dalle ritenute maturate su interessi attivi ad…",
       "credit_description": "LOTTO UNICO composto da: 1) CREDITO IRES, derivante dalle ritenute maturate su interessi attivi ad oggi pari ad € 4.560,96 oltre alle eventuali variazioni in aumento fino alla chiusura del conto corrente della procedura; 2) CREDITO IVA finale ad oggi pari ad € 16.016,00 oltre al credito stimato in € 9.152,00 (o altro minore o maggiore importo) che sarà determinato in via definitiva a seguito della successiva liquidazione del compenso finale del Curatore (SI RIMANDA ALLE AVVERTENZE IN BANDO D'ASTA)",
+      "asset_descriptions": [
+        "LOTTO UNICO composto da: 1) CREDITO IRES, derivante dalle ritenute maturate su interessi attivi ad oggi pari ad € 4.560,96 oltre alle eventuali variazioni in aumento fino alla chiusura del conto corrente della procedura; 2) CREDITO IVA finale ad oggi pari ad € 16.016,00 oltre al credito stimato in € 9.152,00 (o altro minore o maggiore importo) che sarà determinato in via definitiva a seguito della successiva liquidazione del compenso finale del Curatore. AVVERTENZA IMPORTANTE SUL PREZZO E SULLA SUA VARIABILITA’: Il prezzo offerto in sede di gara (partendo dal prezzo base iniziale di euro 15.240,50, pari al 50% del valore stimato) e gli eventuali rilanci in aumento non costituiscono un importo forfettario o \"a corpo\", bensì l'offerta di un corrispettivo espresso in percentuale fissa sul valore nominale complessivo dei crediti che risulterà definitivo ed effettivo alla data della cessione. Di conseguenza, l'aggiudicatario è consapevole e accetta incondizionatamente che il saldo prezzo effettivo da versare entro 15 giorni dall'aggiudicazione sarà calcolato applicando la percentuale di incidenza dell'offerta rispetto al prezzo base sull'intero monte crediti erariali definitivamente maturati (inclusi i minori o i maggiori importi derivanti dalla liquidazione finale del compenso del curatore e delle ritenute sugli interessi bancari). Con la presentazione dell'offerta, l'offerente dichiara di ben conoscere e accettare tale variabilità, rinunciando a qualsiasi eccezione o pretesa al riguardo. Si evidenzia che il prezzo offerto in gara non è un corrispettivo a corpo fisso, ma una percentuale matematica fissa applicata a un \"monte crediti dinamico\", la parte offerente nel partecipare dichiara di essere a conoscenza della determinazione del prezzo accettando incondizionatamente le regole della gara e la trasparenza matematica del criterio di calcolo.L’operazione di cessione dei crediti IVA ed IRES in argomento, ai sensi dell’art. 106 D. Lgs 385/93 (TUB) e degli artt. 2 e 3 del D.M. 53/2015, costituisce attività riservata agli Intermediari finanziari autorizzati, e quindi a Banche e Intermediari finanziari iscritti all’Albo Unico di cui al citato art. 106 T.U.B."
+      ],
       "court_or_procedure": "Tribunale di BERGAMO - 174/2015",
       "publication_date": "2026-09-18",
       "sale_type": "Senza Incanto",
@@ -31,6 +53,9 @@
     {
       "title": "N° 28.263 azioni dal valore nominale unitario di € 1,00, corrispondenti a circa il 4,26% del…",
       "credit_description": "N° 28.263 azioni dal valore nominale unitario di € 1,00, corrispondenti a circa il 4,26% del capitale sociale e quindi pari complessivamente a nominali € 28.263,00, della società “SERVIZI LOGISTICI S.p.A.”. La descrizione dettagliata è riportata in avviso di vendita e la documentazione è caricata in Virtual Data Room (in breve “VDR”) accessibile dal link https://trasformazioneterritoriale.asteannunci.it. Vendita competitiva telematica sul portale www.doauction.it/www.astemobili.i",
+      "asset_descriptions": [
+        "N° 28.263 azioni dal valore nominale unitario di € 1,00, corrispondenti a circa il 4,26% del capitale sociale e quindi pari complessivamente a nominali € 28.263,00, della società “SERVIZI LOGISTICI S.p.A.”. La descrizione dettagliata è riportata in avviso di vendita e la documentazione è caricata in Virtual Data Room (in breve “VDR”) accessibile dal link https://attiva.asteannunci.it. Vendita competitiva telematica sul portale www.doauction.it/www.astemobili.it - Grupp"
+      ],
       "court_or_procedure": "Tribunale di PADOVA - 298/2013",
       "publication_date": "2026-09-18",
       "sale_type": "Tramite Commissionario",
@@ -43,6 +68,9 @@
     {
       "title": "CESSIONE CREDITI SUPERBONUS (110% LART. 119 DL 34/20) ANNUALITA' 2026-2027-2028-2029",
       "credit_description": "CESSIONE CREDITI SUPERBONUS (110% LART. 119 DL 34/20) ANNUALITA' 2026-2027-2028-2029",
+      "asset_descriptions": [
+        "CREDITI D'IMPOSTA SUPERBONUS ART. 119 DL 34/2020 - CODICE TRIBUTO 7719 ANNUALITA' 2026-2027-2028-2029"
+      ],
       "court_or_procedure": "Tribunale di BRESCIA - 136/2026",
       "publication_date": "2026-09-18",
       "sale_type": "Competitiva",
