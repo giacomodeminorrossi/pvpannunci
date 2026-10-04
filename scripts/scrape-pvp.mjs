@@ -11,6 +11,7 @@ import {
   clean,
   courtOrProcedureFrom,
   creditDescriptionFrom,
+  listingDescriptionFrom,
   deduplicateAnnouncements,
   extractJsonDetails,
   isAnnouncementUrl,
@@ -519,7 +520,7 @@ async function firstUsefulHeading(page) {
 
 function extractListingAnnouncement(item) {
   const listingText = item.listingText;
-  const creditDescription = creditDescriptionFrom(listingText);
+  const creditDescription = creditDescriptionFrom(listingText) || listingDescriptionFrom(listingText);
 
   return {
     title: shortTitle(creditDescription),
@@ -536,8 +537,8 @@ function extractListingAnnouncement(item) {
   };
 }
 
-async function findCandidateLink(page, item) {
-  const timeout = operationTimeout(15_000, `la ricerca del link ${item.url}`);
+async function findCandidateLink(page, item, preferredTimeoutMs = 15_000) {
+  const timeout = operationTimeout(preferredTimeoutMs, `la ricerca del link ${item.url}`);
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const links = page.locator("a[href]");
@@ -561,6 +562,33 @@ async function findCandidateLink(page, item) {
     await page.waitForTimeout(250);
   }
   throw new Error(`Link del candidato non trovato nella pagina risultati: ${item.url}.`);
+}
+
+// Come per la paginazione, il PVP può restituire un elenco diverso anche quando
+// si torna alla pagina risultati per aprire un annuncio: in quel caso il link
+// manca e la pagina va ricaricata.
+async function locateCandidateLink(listPage, item) {
+  for (let reload = 0; ; reload += 1) {
+    try {
+      return await findCandidateLink(listPage, item, 8_000);
+    } catch (error) {
+      if (error instanceof BudgetExceededError || reload >= PAGE_RELOADS) throw error;
+      console.warn(
+        `Link di ${item.url} assente dalla pagina risultati: ricaricamento ${reload + 1}/${PAGE_RELOADS}.`,
+      );
+      await listPage.waitForTimeout(PAGE_RELOAD_DELAY_MS);
+      const response = await listPage.goto(item.listingPageUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: operationTimeout(NAVIGATION_TIMEOUT_MS, `il ricaricamento della lista per ${item.url}`),
+      });
+      await assertUsablePage(listPage, response, `la pagina risultati per ${item.url}`);
+      await listPage
+        .waitForLoadState("networkidle", {
+          timeout: operationTimeout(10_000, `l'attesa della lista per ${item.url}`),
+        })
+        .catch(() => {});
+    }
+  }
 }
 
 async function waitForClickedDetail(context, listPage, beforePages, beforeUrl, beforeText, item) {
@@ -692,7 +720,7 @@ async function extractAnnouncement(context, listPage, item) {
   let detailPage = listPage;
   let openedNewPage = false;
   try {
-    const link = await findCandidateLink(listPage, item);
+    const link = await locateCandidateLink(listPage, item);
     const beforePages = new Set(context.pages());
     const beforeUrl = listPage.url();
     const beforeText = await listPage.locator("body").innerText().catch(() => "");

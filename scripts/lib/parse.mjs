@@ -462,3 +462,15 @@ export function assetDescriptionsFrom(text) {
       .map(normalizeCreditDescription),
   );
 }
+
+// Nella scheda della lista risultati la descrizione non ha etichetta: è la riga
+// che precede "Data Pubblicazione" (categoria, data vendita, lotto, indirizzo,
+// descrizione, data pubblicazione, prezzo).
+export function listingDescriptionFrom(text) {
+  const lines = linesOf(text);
+  const index = lines.findIndex((line) => PUBLICATION_LABEL_PATTERN.test(line));
+  if (index < 1) return null;
+  const candidate = lines[index - 1];
+  if (/^lotto\b/i.test(candidate) || toIsoDate(candidate)) return null;
+  return normalizeCreditDescription(candidate) || null;
+}

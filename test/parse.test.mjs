@@ -8,6 +8,7 @@ import {
   extractJsonDetails,
   isAnnouncementUrl,
   isValidIsoDate,
+  listingDescriptionFrom,
   matchLabel,
   normalizeCreditDescription,
   publicationDateFrom,
@@ -190,4 +191,24 @@ test("assetDescriptionsFrom legge i beni inclusi nel lotto", () => {
     "Credito IVA e credito da azione risarcitoria civile",
   ]);
   assert.deepEqual(assetDescriptionsFrom("Descrizione\nNiente beni"), []);
+});
+
+test("listingDescriptionFrom legge la descrizione senza etichetta della scheda in lista", () => {
+  // Testo reale della scheda dell'annuncio 4637012 nella lista risultati.
+  const listing = [
+    "Crediti",
+    "Data vendita",
+    "05/11/2026 14:30",
+    "Lotto unico",
+    "Viale San Giovanni 11/A, 33078 San Vito al Tagliamento",
+    "Crediti tributari e risarcitori",
+    "Data Pubblicazione:",
+    "28/09/2026",
+    "Prezzo base d'asta",
+    "10.000,00",
+    "VAI ALL'ANNUNCIO",
+  ].join("\n");
+  assert.equal(listingDescriptionFrom(listing), "Crediti tributari e risarcitori");
+  assert.equal(listingDescriptionFrom("Lotto unico\nData Pubblicazione:\n28/09/2026"), null);
+  assert.equal(listingDescriptionFrom("Nessuna data"), null);
 });
