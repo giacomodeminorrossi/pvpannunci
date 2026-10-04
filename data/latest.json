@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-04T07:08:45.260Z",
+  "checked_at": "2026-10-04T07:12:42.681Z",
   "target_date": "2026-10-03",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
   "status": "success",
@@ -17,11 +17,13 @@
   "announcement_errors": [],
   "announcements": [
     {
-      "title": "Cessione pro soluto, in lotto unico, del credito IVA del Fallimento Nugeco Immobiliare s.r.l. n. 150/2017 che risulterà dalla dichiarazione IVA 2027 e sarà richiesto a rimborso nei limiti consentiti dalla normativa applicabile. Valore nominale complessivo attualmente stimato in euro 20.163,23. Prezzo base d'asta pari ad euro 9.736,00. Per le condizioni e le modalità di cessione si rinvia all'avviso di vendita allegato.",
+      "title": "Cessione pro soluto, in lotto unico, del credito IVA del Fallimento Nugeco Immobiliare s.r.l. n.…",
       "credit_description": "Cessione pro soluto, in lotto unico, del credito IVA del Fallimento Nugeco Immobiliare s.r.l. n. 150/2017 che risulterà dalla dichiarazione IVA 2027 e sarà richiesto a rimborso nei limiti consentiti dalla normativa applicabile. Valore nominale complessivo attualmente stimato in euro 20.163,23. Prezzo base d'asta pari ad euro 9.736,00. Per le condizioni e le modalità di cessione si rinvia all'avviso di vendita allegato.",
       "court_or_procedure": "Tribunale di ROMA - 150/2017",
       "publication_date": "2026-10-03",
-      "sale_or_deadline_date": "2026-11-05",
+      "sale_type": "Competitiva",
+      "sale_date": "2026-11-06T12:00",
+      "offer_deadline": "2026-11-05T13:00",
       "base_auction_price": "9.736,00 €",
       "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4639634",
       "detail_verified": true
