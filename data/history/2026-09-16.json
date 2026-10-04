@@ -1,36 +1,89 @@
 {
-  "checked_at": "2026-10-04T07:26:22.601Z",
+  "checked_at": "2026-10-04T07:39:13.727Z",
   "target_date": "2026-09-16",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
-  "status": "success",
-  "error": null,
-  "warnings": [],
+  "status": "partial",
+  "error": "1 avvisi durante il controllo; la copertura non è completa.",
+  "warnings": [
+    {
+      "code": "announcement_detail_unverified",
+      "message": "Link del candidato non trovato nella pagina risultati: https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4631568.",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4631568",
+      "publication_date": "2026-09-16",
+      "detail_verified": false,
+      "retained_from": "result_listing",
+      "diagnostics": {
+        "html": "diagnostics/4631568/detail.html",
+        "screenshot": "diagnostics/4631568/detail.png",
+        "network": "diagnostics/4631568/network-summary.json"
+      },
+      "diagnostics_error": null
+    }
+  ],
   "errors": [],
   "coverage": {
-    "complete": true,
+    "complete": false,
     "pages_checked": 2,
     "listings_seen": 96,
     "candidates_found": 4,
-    "candidates_checked": 4,
-    "stop_reason": "page_only_older_dates"
+    "candidates_checked": 3,
+    "stop_reason": "page_only_older_dates",
+    "pages": [
+      {
+        "page": 1,
+        "listings": 48,
+        "newest": "2026-10-03",
+        "oldest": "2026-09-10",
+        "undated": 0,
+        "ordered": true
+      },
+      {
+        "page": 2,
+        "listings": 48,
+        "newest": "2026-09-10",
+        "oldest": "2026-08-25",
+        "undated": 0,
+        "ordered": true
+      }
+    ],
+    "site_newest_date": "2026-10-03"
   },
-  "announcement_errors": [],
+  "announcement_errors": [
+    {
+      "code": "announcement_detail_unverified",
+      "message": "Link del candidato non trovato nella pagina risultati: https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4631568.",
+      "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4631568",
+      "publication_date": "2026-09-16",
+      "detail_verified": false,
+      "retained_from": "result_listing",
+      "diagnostics": {
+        "html": "diagnostics/4631568/detail.html",
+        "screenshot": "diagnostics/4631568/detail.png",
+        "network": "diagnostics/4631568/network-summary.json"
+      },
+      "diagnostics_error": null
+    }
+  ],
   "announcements": [
     {
-      "title": "Cessione Pro-Soluto - Crediti d'imposta Superbonus 110% - vendita telematica sulla piattaforma…",
-      "credit_description": "Cessione Pro-Soluto - Crediti d'imposta Superbonus 110% - vendita telematica sulla piattaforma www.gobid.it n.33253",
-      "court_or_procedure": "Tribunale di LATINA - 103/2025",
+      "title": null,
+      "credit_description": null,
+      "asset_descriptions": [],
+      "court_or_procedure": null,
       "publication_date": "2026-09-16",
-      "sale_type": "Competitiva",
+      "sale_type": null,
       "sale_date": "2026-10-27T12:02",
-      "offer_deadline": "2026-10-27T12:00",
-      "base_auction_price": "10.886,85 €",
+      "offer_deadline": null,
+      "base_auction_price": "10.886,85",
       "official_url": "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=4631568",
-      "detail_verified": true
+      "detail_verified": false
     },
     {
       "title": "LOTTO 1: 50% DELLE QUOTE DI PARTECIPAZIONE NELLA SOCIETA' FCO STUDIO CONSULTING SRL",
       "credit_description": "LOTTO 1: 50% DELLE QUOTE DI PARTECIPAZIONE NELLA SOCIETA' FCO STUDIO CONSULTING SRL",
+      "asset_descriptions": [
+        "LOTTO 1: 50% DELLE QUOTE DI PARTECIPAZIONE NELLA SOCIETA' FCO STUDIO CONSULTING SRL"
+      ],
       "court_or_procedure": "Tribunale di CIVITAVECCHIA - 438/2026",
       "publication_date": "2026-09-16",
       "sale_type": "Competitiva",
@@ -43,6 +96,9 @@
     {
       "title": "Cessione di crediti vantati nei confronti di Comuni",
       "credit_description": "Cessione di crediti vantati nei confronti di Comuni",
+      "asset_descriptions": [
+        "Cessione di crediti vantati nei confronti di Comuni"
+      ],
       "court_or_procedure": "Tribunale di TRENTO - 2/2017",
       "publication_date": "2026-09-16",
       "sale_type": "Competitiva",
@@ -55,6 +111,9 @@
     {
       "title": "Crediti fiscali da Ecobonus, maturati a decorrere dall’anno 2021, derivanti da interventi di…",
       "credit_description": "Crediti fiscali da Ecobonus, maturati a decorrere dall’anno 2021, derivanti da interventi di riqualificazione energetica eseguiti su immobili di proprietà dei clienti della società in LG o nella disponibilità del soggetto richiedente lo sconto in fattura.",
+      "asset_descriptions": [
+        "Crediti fiscali da Ecobonus, maturati a decorrere dall’anno 2021, derivanti da interventi di riqualificazione energetica eseguiti su immobili di proprietà dei clienti della società in LG o nella disponibilità del soggetto richiedente lo sconto in fattura."
+      ],
       "court_or_procedure": "Tribunale di TORINO - 225/2025",
       "publication_date": "2026-09-16",
       "sale_type": "Competitiva",
