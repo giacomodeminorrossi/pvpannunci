@@ -537,6 +537,35 @@ async function saveDiagnostics(page, item, networkResponses, error) {
   return paths;
 }
 
+// Salva il testo letto per ogni annuncio verificato, così le etichette reali
+// della pagina si possono consultare negli artifact dell'esecuzione.
+async function saveDetailText(item, bodyText, jsonDetails) {
+  const id = (announcementIdFrom(item.url) || `candidate-${Date.now()}`).replace(
+    /[^a-zA-Z0-9_-]/g,
+    "_",
+  );
+  const directory = resolve(DIAGNOSTICS_PATH, id);
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    resolve(directory, "detail-text.txt"),
+    [
+      `URL: ${sanitizeOfficialUrl(item.url)}`,
+      `Titolo del link nella lista: ${item.listingTitle}`,
+      "",
+      "=== Testo della scheda nella lista ===",
+      item.listingText,
+      "",
+      "=== Testo della pagina di dettaglio ===",
+      bodyText,
+      "",
+      "=== Campi letti dalle risposte JSON ===",
+      JSON.stringify(jsonDetails, null, 2),
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
 async function restoreResultsPage(page, item) {
   if (page.isClosed()) return;
   if (page.url() !== item.listingPageUrl) {
@@ -606,6 +635,9 @@ async function extractAnnouncement(context, listPage, item) {
       throw bodyError || new Error(`Data di pubblicazione non verificabile per l'annuncio ${item.url}.`);
     }
     if (publicationDate !== targetDate) return null;
+    await saveDetailText(item, bodyText, jsonDetails).catch((error) => {
+      console.warn(`Testo del dettaglio non salvato per ${item.url}: ${error.message}`);
+    });
 
     const courtOrProcedure = courtOrProcedureFrom(bodyText);
     const saleOrDeadlineDate = saleOrDeadlineDateFrom(bodyText);
