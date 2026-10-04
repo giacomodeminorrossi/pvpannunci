@@ -88,6 +88,17 @@ jobs:
           TARGET_DATE: ${{ steps.schedule_guard.outputs.target_date }}
         run: npm run scrape
 
+      - name: Mostra il testo dei dettagli letti
+        if: always() && steps.schedule_guard.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for file in diagnostics/*/detail-text.txt; do
+            echo "::group::$file"
+            cat "$file"
+            echo "::endgroup::"
+          done
+
       - name: Carica la diagnostica (testo dei dettagli e pagine non verificate)
         if: always() && steps.schedule_guard.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
