@@ -56,11 +56,18 @@ jobs:
           # Con l'ora legale entrambi i cron cadono nella finestra e controllano la
           # stessa data: il secondo viene saltato se il primo è già riuscito.
           history_file="data/history/$target_date.json"
-          if [[ "$EVENT_NAME" == "schedule" && -f "$history_file" ]] \
-            && [[ "$(jq -r '.status' "$history_file")" == "success" ]]; then
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Data $target_date già controllata con successo: esecuzione saltata."
-            exit 0
+          if [[ "$EVENT_NAME" == "schedule" && -f "$history_file" ]]; then
+            previous_status="$(jq -r '.status // empty' "$history_file")"
+            previous_checked="$(jq -r '.checked_at // empty' "$history_file")"
+            previous_local=""
+            if [[ -n "$previous_checked" ]]; then
+              previous_local="$(TZ=Europe/Paris date -d "$previous_checked" '+%F %H' 2>/dev/null || true)"
+            fi
+            if [[ "$previous_status" == "success" && "$previous_local" > "$target_date 22" ]]; then
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "Data $target_date già controllata con successo (ore $previous_local): esecuzione saltata."
+              exit 0
+            fi
           fi
           echo "should_run=true" >> "$GITHUB_OUTPUT"
           echo "target_date=$target_date" >> "$GITHUB_OUTPUT"
