@@ -1,15 +1,10 @@
 {
-  "checked_at": "2026-10-11T00:12:06.408Z",
+  "checked_at": "2026-10-11T00:57:11.563Z",
   "target_date": "2026-10-10",
   "source_url": "https://pvp.giustizia.it/pvp/it/lista_annunci.page?searchType=searchForm&page=0&size=48&sortProperty=dataPubblicazione,desc&sortAlpha=citta,asc&searchWith=Raggio%20d%27azione&codTipoLotto=VALORI/CREDITI&raggioAzione=25",
   "status": "partial",
-  "error": "2 avvisi durante il controllo; la copertura non è completa.",
+  "error": "1 avvisi durante il controllo; la copertura non è completa.",
   "warnings": [
-    {
-      "code": "first_page_older_than_previous_run",
-      "message": "Pagina 1 anomala anche dopo 2 ricaricamenti: l'annuncio più recente (2024-01-22) è più vecchio di quello visto nel controllo precedente (2026-10-09).",
-      "page": 1
-    },
     {
       "code": "result_order_unexpected",
       "message": "Le date di pubblicazione non sono in ordine decrescente: la copertura non è garantita.",
